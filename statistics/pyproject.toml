@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mave-imputation-statistical-analysis"
+version = "0.1.0"
+description = "Figure-aligned statistical analysis for MAVE imputation experiments"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "scipy>=1.11",
+  "matplotlib>=3.10",
+  "seaborn>=0.13",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=9.0"]
+
+[project.scripts]
+mave-stats = "cli.generate_statistics:main"
+mave-figures = "cli.generate_figures:main"
+mave-trp165 = "cli.analyze_trp165_wt_extremes:main"
+
+[tool.setuptools]
+package-dir = {"" = "code"}
+
+[tool.setuptools.packages.find]
+where = ["code"]
+
+[tool.pytest.ini_options]
+pythonpath = ["code"]
+testpaths = ["tests"]

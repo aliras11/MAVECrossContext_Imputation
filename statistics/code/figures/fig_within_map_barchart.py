@@ -1,0 +1,114 @@
+"""Within-Map — Grouped Bar Chart with best-model significance marker"""
+from pathlib import Path
+from figures import figure_helpers as fh
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.lines import Line2D
+
+
+def main(
+    results_dir: Path,
+    nodouble_results_dir: Path,
+    statistics_dir: Path,
+    output_dir: Path,
+) -> None:
+    """Generate this module's established figure outputs."""
+    plot_rates = fh.RATES
+    suffix = ""
+    fh.apply_style()
+    summary, pairwise = fh.load_bar_panel_data(
+        statistics_dir,
+        "rmse_summary_within_map.csv",
+        "pairwise_mwu_within_map.csv",
+    )
+
+    # Order models by mean RMSE at rate 40
+    order = (
+        summary.loc[summary["rate"] == 40]
+        .sort_values("mean_rmse")["model"]
+        .tolist()
+    )
+    plot_models = [m for m in order if m != 'col_mean']
+
+    n_methods = len(plot_models)
+    n_rates = len(plot_rates)
+
+    means = (
+        summary.pivot(index="model", columns="rate", values="mean_rmse")
+        .reindex(index=plot_models, columns=plot_rates)
+        .to_numpy()
+    )
+    sems = (
+        summary.pivot(index="model", columns="rate", values="se_rmse")
+        .reindex(index=plot_models, columns=plot_rates)
+        .to_numpy()
+    )
+    cm_means = (
+        summary.loc[summary["model"] == "col_mean"]
+        .set_index("rate")["mean_rmse"]
+        .reindex(plot_rates)
+        .to_numpy()
+    )
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(12, 8))
+    x = np.arange(n_rates)
+    width = 0.8 / n_methods
+
+    bar_containers = {}
+    for i, model in enumerate(plot_models):
+        offset = (i - n_methods / 2 + 0.5) * width
+        color = fh.get_color(model)
+        display = fh.get_task_display_name(model, "within_map")
+
+        ax.bar(x + offset, means[i, :], width,
+               label=display, color=color, alpha=0.85,
+               yerr=sems[i, :] * 1.96, capsize=2,
+               error_kw={'elinewidth': 0.8, 'capthick': 0.8})
+        bar_containers[model] = (offset, means[i, :], sems[i, :])
+
+    # Mark best model at each rate (if sig from all others)
+    for j, rate in enumerate(plot_rates):
+        # Find best model (lowest mean RMSE)
+        finite = np.flatnonzero(np.isfinite(means[:, j]))
+        if len(finite) == 0:
+            continue
+        best_idx = finite[np.argmin(means[finite, j])]
+        best_model = plot_models[best_idx]
+        if fh.best_model_is_significant(
+            pairwise,
+            rate=rate,
+            best_model=best_model,
+        ):
+            offset, m, s = bar_containers[best_model]
+            bar_x = x[j] + offset
+            marker_y = m[j] + s[j] * 1.96 + 0.006
+            ax.plot(bar_x, marker_y, '*', markersize=12, color='gold',
+                    markeredgecolor='black', markeredgewidth=0.5, zorder=10)
+
+    # Column mean baseline horizontal lines
+    for j, rate in enumerate(plot_rates):
+        if not np.isnan(cm_means[j]):
+            ax.hlines(cm_means[j], x[j] - 0.42, x[j] + 0.42,
+                      colors='red', linestyles='--', linewidth=1.8, alpha=0.7,
+                      label='Column Mean baseline' if j == 0 else None)
+
+    ax.set_ylim(0.30, 0.52)
+    ax.set_xlabel('Saturation (%)')
+    ax.set_ylabel('Mean RMSE (\u00b1 95% CI)')
+    ax.set_title('Within-Map (W) Imputation')
+    ax.set_xticks(x)
+    ax.set_xticklabels([f'{100-r}%' for r in plot_rates])
+    ax.grid(True, alpha=0.3, linestyle=':', axis='y')
+
+    # Legend
+    handles, labels = ax.get_legend_handles_labels()
+    handles.append(Line2D([0], [0], marker='*', color='w', markerfacecolor='gold',
+                           markeredgecolor='black', markersize=12,
+                           label='Lowest mean; significant vs all'))
+    labels.append('Lowest mean; significant vs all')
+    ax.legend(handles=handles, labels=labels, loc='upper left', fontsize=12,
+              frameon=True, edgecolor='black')
+
+    plt.tight_layout()
+    fh.save_figure(fig, f'within_map_barchart{suffix}', output_dir)
