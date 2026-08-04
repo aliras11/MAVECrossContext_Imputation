@@ -137,7 +137,7 @@ if __name__ == "__main__":
     parser.add_argument("--n-splits", type=int, required=True, help="Number of splits to generate per missing rate.")
     parser.add_argument(
         "--rate", dest="rates", action="append", default=None,
-        help="Missing rate per split. Can be provided multiple times. Accepts percent (e.g., 10 or 10%) or fraction (e.g., 0.1). Default: 10"
+        help="Missing rate per split. Can be provided multiple times. Accepts percent (e.g., 10) or fraction (e.g., 0.1). Default: 10"
     )
     parser.add_argument("--output-dir", default="data_splits", help="Output directory for splits and masks.")
     parser.add_argument("--seed", type=int, default=42, help="Base seed for RNG.")

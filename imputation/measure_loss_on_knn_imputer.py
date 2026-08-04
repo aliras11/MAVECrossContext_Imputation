@@ -5,6 +5,8 @@ import numpy as np
 from pathlib import Path
 import re
 
+from runtime_paths import FULL_DATA_CSV, LOSS_RESULTS_DIR, REGULAR_SPLITS_DIR
+
 
 parser = argparse.ArgumentParser(description="Measure RMSE on KNN-BLOSUM imputed splits.")
 parser.add_argument(
@@ -15,8 +17,8 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-full_data_df = pd.read_csv(Path(__file__).resolve().parent.parent / "full_data" / "mthfr_crossAllcontext_domainannotation.csv")
-base_dir = Path(__file__).resolve().parent.parent / "data_splits"
+full_data_df = pd.read_csv(FULL_DATA_CSV)
+base_dir = REGULAR_SPLITS_DIR
 
 sim_tag = f"_{args.sim_mode}" if args.sim_mode != "diff" else ""
 
@@ -114,7 +116,7 @@ for r in rates:
 
                         print(f"        Column: {col}, RMSE: {loss:.4f}")
 results_df = pd.DataFrame(all_results)
-project_root = Path(__file__).resolve().parent.parent
-out_path = project_root / f"blosum_knn{sim_tag}_rmse_all_splits.csv"
+LOSS_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+out_path = LOSS_RESULTS_DIR / f"blosum_knn{sim_tag}_rmse_all_splits.csv"
 results_df.to_csv(out_path, index=False)
 print(f"Saved {len(results_df)} rows -> {out_path}")

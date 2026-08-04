@@ -3,12 +3,14 @@ import numpy as np
 from pathlib import Path
 import re
 
+from runtime_paths import FULL_DATA_CSV, LOSS_RESULTS_DIR, REGULAR_SPLITS_DIR
+
 
 
 
 ###measure losses on Column Mean outputs###
-full_data_df = pd.read_csv(Path(__file__).resolve().parent.parent / "full_data" / "mthfr_crossAllcontext_domainannotation.csv")
-base_dir = Path(__file__).resolve().parent.parent / "data_splits"
+full_data_df = pd.read_csv(FULL_DATA_CSV)
+base_dir = REGULAR_SPLITS_DIR
 
 def extract_r_s(name: str):
     # Pull integers following 'r' and 's' anywhere in the filename
@@ -88,8 +90,8 @@ for rate in rates:
                             
 
 if all_results:
-    project_root = Path(__file__).resolve().parent.parent
-    save_path = project_root / "col_mean_imputed_results.csv"
+    LOSS_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    save_path = LOSS_RESULTS_DIR / "col_mean_imputed_results.csv"
     combined_results = pd.DataFrame(all_results)
     combined_results.to_csv(save_path, index=False)
     print(f"Saved combined results with {len(combined_results)} rows")

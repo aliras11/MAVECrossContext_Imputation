@@ -3,10 +3,12 @@ import numpy as np
 from pathlib import Path
 import re
 
+from runtime_paths import FULL_DATA_CSV, LOSS_RESULTS_DIR, REGULAR_SPLITS_DIR
+
 
 ###measure losses on Single AE outputs###
-full_data_df = pd.read_csv(Path(__file__).resolve().parent.parent / "full_data" / "mthfr_crossAllcontext_domainannotation.csv")
-base_dir = Path(__file__).resolve().parent.parent / "data_splits"
+full_data_df = pd.read_csv(FULL_DATA_CSV)
+base_dir = REGULAR_SPLITS_DIR
 
 def extract_r_s(name: str):
     # Pull integers following 'r' and 's' anywhere in the filename
@@ -108,7 +110,6 @@ if all_results:
 else:
     print("No results found")    
 
-project_root = Path(__file__).resolve().parent.parent
-output_dir = project_root / "splits_results_0506"
+output_dir = LOSS_RESULTS_DIR
 output_dir.mkdir(parents=True, exist_ok=True)
 combined_results.to_csv(output_dir / "single_AE3_rmse_results.csv", index=True)

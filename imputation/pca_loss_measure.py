@@ -8,8 +8,10 @@ import numpy as np
 from pathlib import Path
 import re
 
-full_data_df = pd.read_csv(Path(__file__).resolve().parent.parent / "full_data" / "mthfr_crossAllcontext_domainannotation.csv")
-base_dir = Path(__file__).resolve().parent.parent / "data_splits"
+from runtime_paths import FULL_DATA_CSV, LOSS_RESULTS_DIR, REGULAR_SPLITS_DIR
+
+full_data_df = pd.read_csv(FULL_DATA_CSV)
+base_dir = REGULAR_SPLITS_DIR
 
 def extract_r_s(name: str):
     rm = re.search(r"r(\d+)", name, flags=re.IGNORECASE)
@@ -98,17 +100,17 @@ print(f"\nTotal results: {len(all_results)}")
 
 if all_results:
     combined = pd.DataFrame(all_results)
-    project_root = Path(__file__).resolve().parent.parent
+    LOSS_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Save one combined CSV with all component counts
-    combined.to_csv(project_root / "pca_rmse_results_all.csv", index=False)
+    combined.to_csv(LOSS_RESULTS_DIR / "pca_rmse_results_all.csv", index=False)
     print(f"Saved pca_rmse_results_all.csv ({len(combined)} rows)")
 
     # Also save per-component CSVs for easy loading
     for nc in n_components_list:
         sub = combined[combined['n_components'] == nc]
         if len(sub) > 0:
-            sub.to_csv(project_root / f"pca_k{nc}_rmse_results.csv", index=False)
+            sub.to_csv(LOSS_RESULTS_DIR / f"pca_k{nc}_rmse_results.csv", index=False)
             print(f"Saved pca_k{nc}_rmse_results.csv ({len(sub)} rows)")
 else:
     print("No results found")

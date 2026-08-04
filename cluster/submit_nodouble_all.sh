@@ -5,6 +5,7 @@
 # Stage 3: Measure losses (after all models complete)
 
 set -e
+cd "$(dirname "$0")"
 mkdir -p logs
 
 echo "Stage 1: Submitting split generator..."
@@ -34,9 +35,9 @@ echo "  Loss measurement job: $LOSS_JOB"
 echo ""
 echo "Pipeline submitted:"
 echo "  Splits:   $SPLIT_JOB"
-echo "  LMM:      $J1 (32 tasks)"
-echo "  MICE PMM: $J2 (32 tasks)"
-echo "  MICE RF:  $J3 (32 tasks)"
-echo "  SingleAE: $J4 (32 tasks)"
-echo "  DualAE:   $J5 (32 tasks)"
+echo "  LMM:      $J1 (40 tasks)"
+echo "  MICE PMM: $J2 (40 tasks)"
+echo "  MICE RF:  $J3 (40 tasks)"
+echo "  SingleAE: $J4 (40 tasks)"
+echo "  DualAE:   $J5 (40 tasks)"
 echo "  Losses:   $LOSS_JOB (after all above)"

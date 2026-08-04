@@ -16,7 +16,7 @@ SCRIPTS=$ROOT/MAVE-Imputation-Pipeline/imputation
 python $SCRIPTS/singleae_loss_measure.py
 python $SCRIPTS/doubleae_loss_measure.py
 python $SCRIPTS/measure_loss_on_splits_colmean.py
-python $SCRIPTS/measure_loss_on_knn_imputer.py
+python $SCRIPTS/measure_loss_on_knn_imputer.py --sim_mode direct
 python $SCRIPTS/pca_loss_measure.py
 python $SCRIPTS/measure_loss_on_splits_mice.py
 python $SCRIPTS/measure_loss_on_splits_RFmice2.py

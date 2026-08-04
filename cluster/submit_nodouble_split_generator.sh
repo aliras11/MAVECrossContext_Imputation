@@ -17,6 +17,6 @@ OUT_DIR=$ROOT/data_splits_no_double_missing
 python $SCRIPTS/split_generator_nodouble_missing.py \
   --full-data $FULL_CSV \
   --n-splits 50 \
-  --rate 10 --rate 40 --rate 80 --rate 99 \
+  --rate 10 --rate 40 --rate 80 --rate 99 --rate 99.9 \
   --output-dir $OUT_DIR \
   --seed 42

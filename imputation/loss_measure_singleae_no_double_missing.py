@@ -11,10 +11,12 @@ from pathlib import Path
 import re
 import argparse
 
+from runtime_paths import FULL_DATA_CSV, LOSS_RESULTS_DIR, NODOUBLE_SPLITS_DIR
+
 CONTEXTS = ['av12', 'av25', 'av100', 'av200', 'wt12', 'wt25', 'wt100', 'wt200']
 
-full_data_df = pd.read_csv(Path(__file__).resolve().parent.parent / "full_data" / "mthfr_crossAllcontext_domainannotation.csv")
-default_base_dir = Path(__file__).resolve().parent.parent / "data_splits_no_double_missing"
+full_data_df = pd.read_csv(FULL_DATA_CSV)
+default_base_dir = NODOUBLE_SPLITS_DIR
 
 def extract_r_s(name: str):
     rm = re.search(r"r(\d+)", name, flags=re.IGNORECASE)
@@ -130,8 +132,7 @@ if __name__ == "__main__":
     if all_results:
         combined_results = pd.concat(all_results, ignore_index=True)
         print(f"\nCombined results shape: {combined_results.shape}")
-        project_root = Path(__file__).resolve().parent.parent
-        output_dir = project_root / "splits_results_0506"
+        output_dir = LOSS_RESULTS_DIR
         output_dir.mkdir(parents=True, exist_ok=True)
         combined_results.to_csv(output_dir / "single_AE3_rmse_no_double_missing.csv", index=False)
         print(f"Saved to {output_dir / 'single_AE3_rmse_no_double_missing.csv'}")
