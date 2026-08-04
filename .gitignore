@@ -1,0 +1,46 @@
+# macOS
+.DS_Store
+
+# Python and R runtime state
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Local environments
+.venv/
+venv/
+env/
+.env
+.envrc
+
+# Generated pipeline outputs
+data_splits/
+data_splits_no_double_missing/
+predictions/
+results/
+cluster_results/
+artifacts/
+figures/
+draft_figures/
+draft_figures2/
+logs/
+
+# Scheduler output
+*.out
+*.err
+slurm-*.out
+
+# Temporary and staging work
+tmp/
+temp/
+staging/
+.tmp/
+.staging/
