@@ -11,7 +11,11 @@ import subprocess
 
 import pandas as pd
 
-from decomposition.core import FIX_COMMIT, build_prediction_events, reduce_events
+from decomposition.core import (
+    ACCEPTED_CORRECTED_ROOTS,
+    build_prediction_events,
+    reduce_events,
+)
 from decomposition.layouts import (
     InputUnit,
     ModelLayout,
@@ -83,17 +87,20 @@ def _header_signature(path: Path) -> str:
 
 
 def _is_fix_or_descendant(commit: str) -> bool:
-    if commit == FIX_COMMIT:
+    if commit in ACCEPTED_CORRECTED_ROOTS:
         return True
     repository_root = Path(__file__).resolve().parents[1]
-    result = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", FIX_COMMIT, commit],
-        cwd=repository_root,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    return result.returncode == 0
+    for root in ACCEPTED_CORRECTED_ROOTS:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", root, commit],
+            cwd=repository_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            return True
+    return False
 
 
 def _add_unit_metadata(events: pd.DataFrame, unit: InputUnit) -> pd.DataFrame:
@@ -271,8 +278,8 @@ def plan_tasks(
             )
         if not _is_fix_or_descendant(generation_commit):
             raise ValueError(
-                "generation_commit must be the synonymous fix commit "
-                f"{FIX_COMMIT} or a descendant"
+                "generation_commit must be an approved corrected provenance "
+                "root or descendant: " + ", ".join(ACCEPTED_CORRECTED_ROOTS)
             )
 
     rows = []
