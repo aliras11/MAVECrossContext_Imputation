@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Usage:
-# Rscript lmm_runonsplits.R --splits_dir /Users/ser219/Desktop/imputation_splits_mthfr/data_splits --rate 10 --out_dir linear_models_outputs
+# Rscript lmm_runon_splits.R --splits_dir /path/to/run_root/data_splits --rate 10 --out_dir /path/to/run_root/data_splits
 
 suppressPackageStartupMessages({
   if (!requireNamespace("optparse", quietly = TRUE)) install.packages("optparse", repos = "https://cloud.r-project.org")
