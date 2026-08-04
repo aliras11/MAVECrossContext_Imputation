@@ -1,0 +1,1 @@
+"""Validated variance-decomposition pipeline."""
