@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "mave-imputation-statistical-analysis"
 version = "0.1.0"
 description = "Figure-aligned statistical analysis for MAVE imputation experiments"
-readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "numpy>=1.26",
@@ -15,9 +14,6 @@ dependencies = [
   "matplotlib>=3.10",
   "seaborn>=0.13",
 ]
-
-[project.optional-dependencies]
-test = ["pytest>=9.0"]
 
 [project.scripts]
 mave-stats = "cli.generate_statistics:main"
@@ -29,7 +25,3 @@ package-dir = {"" = "code"}
 
 [tool.setuptools.packages.find]
 where = ["code"]
-
-[tool.pytest.ini_options]
-pythonpath = ["code"]
-testpaths = ["tests"]
