@@ -20,7 +20,7 @@ RUN_ROOT/
 ├── MAVE-Imputation-Pipeline/       # this checkout
 ├── data_splits/                    # regular splits and predictions
 ├── data_splits_no_double_missing/  # no-double splits and predictions
-├── splits_results_0506/            # all 13 statistics input CSVs
+├── splits_results_0506/            # all 14 statistics input CSVs
 └── full_data/                       # staged copy for decomposition/Trp165
 ```
 
@@ -151,7 +151,7 @@ bash cluster/submit_all.sh
 bash cluster/submit_nodouble_all.sh
 ```
 
-`submit_all.sh` generates regular splits, runs eight model jobs, and then runs regular loss measurement. It evaluates both KNN similarity modes and the required loss stage explicitly measures direct KNN. `submit_nodouble_all.sh` generates all five no-double labels (`10,40,80,99,999`), runs five between-map model families as 40-task arrays (five rates × eight targets), and measures their losses in the same dependency graph.
+`submit_all.sh` generates regular splits, runs eight model jobs, and then runs regular loss measurement. It evaluates both KNN similarity modes and the required loss stage explicitly measures direct KNN and task-matched Column Mean. `submit_nodouble_all.sh` generates all five no-double labels (`10,40,80,99,999`), runs five between-map model families plus target-only Column Mean as six 40-task arrays (five rates × eight targets), and measures all six families after every model array succeeds.
 
 Individual wrapper mapping:
 
@@ -166,7 +166,8 @@ Individual wrapper mapping:
 | `cluster/submit_nodouble_split_generator.sh` | Five-rate no-double split/mask generation. |
 | `cluster/submit_nodouble_single_ae.sh`, `submit_nodouble_dual_ae.sh` | No-double SingleAE and DualAE. |
 | `cluster/submit_nodouble_mice.sh`, `submit_nodouble_mice_rf.sh`, `submit_nodouble_lmm.sh` | No-double MICE-PMM, MICE-RF, and R linear/mixed models. |
-| `cluster/submit_nodouble_measure_losses.sh` | Five required no-double loss CSVs. |
+| `cluster/submit_nodouble_colmean.sh` | No-double target-only Column Mean for every target/rate combination. |
+| `cluster/submit_nodouble_measure_losses.sh` | Six required no-double loss CSVs, including task-matched Column Mean B1. |
 
 ### 5. Run individual models directly
 
@@ -196,6 +197,9 @@ python imputation/single_ae_runon_nodouble_splits.py \
 python imputation/dual_ae_runon_nodouble_splits.py \
   --base-dir "$RUN_ROOT/data_splits_no_double_missing" \
   --num-splits 50 --missing-rate 999 --target av12
+python imputation/colmean_imputer_runonsplits.py \
+  --base-dir "$RUN_ROOT/data_splits_no_double_missing/tgt_av12" \
+  --num-splits 50 --missing-rate 999
 ```
 
 `knn_runon_splits.py` automatically uses `imputation/blosum100.iij` when `--matrix BLOSUM100` is selected and `--matrix-file` is omitted. `--sim_mode diff` ranks by the difference from the wild-type→mutant substitution score; `direct` ranks candidate amino acids directly against the mutant. The statistics pipeline requires the direct-mode loss file.
@@ -233,7 +237,8 @@ python imputation/measure_loss_on_splits_mice.py
 python imputation/measure_loss_on_splits_RFmice2.py
 python imputation/measure_loss_on_splits_linearmodels.py
 python imputation/measure_loss_on_knn_imputer.py --sim_mode direct
-python imputation/measure_loss_on_splits_colmean.py
+python imputation/measure_loss_on_splits_colmean.py \
+  --expected-splits 50
 python imputation/pca_loss_measure.py
 
 python imputation/loss_measure_singleae_no_double_missing.py
@@ -241,9 +246,13 @@ python imputation/loss_measure_dualae_no_double_missing.py
 python imputation/loss_measure_mice_no_double_missing.py
 python imputation/loss_measure_micerf_no_double_missing.py
 python imputation/loss_measure_linearmodels_no_double_missing.py
+python imputation/loss_measure_colmean_no_double_missing.py \
+  --expected-splits 50
 ```
 
-The no-double loss scripts also support `--base-dir`, `--target` (one or more values), and `--rates` (one or more integer labels). There is no separate collator: successful execution of these scripts creates the 13 files expected by statistics in the common directory.
+The task-matched regular scorer accepts `--full-data`, `--base-dir`, `--run-root`, `--output`, `--rates`, and `--expected-splits`. Its no-double counterpart accepts the same options plus one or more `--target` values. With no overrides they scan all established rates, targets, and split IDs `1..50` and write their fixed filenames under `$RUN_ROOT/splits_results_0506`. The other no-double loss scripts also support `--base-dir`, `--target`, and `--rates`. There is no separate collator: successful execution creates the 14 files expected by statistics in the common directory.
+
+Column Mean is a target-only estimator: it does not use a source map. For each missing target score, `colmean_imputer_runonsplits.py` first uses the mean among training rows in the same amino-acid position (`pos_aminoacid`) group, then falls back to the global training mean for that target score column if the position mean is unavailable. The same target prediction is evaluated for W and reused across every ordered source-to-target B1 or B0 comparison. The target mask identifies deliberate target holdout; the finite or missing source value in the training split, not the mask, classifies that held-out target as B1 or B0. Rows with naturally missing target truth or non-finite predictions are excluded.
 
 ### 7. Run variance decomposition
 
@@ -285,7 +294,7 @@ python -m decomposition.summarize_split_variability \
 
 ### 8. Generate manuscript statistics
 
-Both input options point to the same co-located directory because it contains all eight regular and five no-double files. Use a dedicated output directory, not the raw-results directory or its parent:
+Both input options point to the same co-located directory because it contains all eight regular and six no-double files. Use a dedicated output directory, not the raw-results directory or its parent:
 
 ```bash
 cd "$REPO"
@@ -315,7 +324,19 @@ For model `m`, rate `r`, and split `s`, headline RMSE pools eligible held-out ce
 RMSE(m,r,s) = sqrt(sum_i[n_i * RMSE_i^2] / sum_i[n_i])
 ```
 
-Thus a context pair with more eligible values receives more weight; context pairs are not equally weighted. The runtime performs unpaired, two-sided Mann–Whitney U tests on split-level RMSE arrays. Headline and Column-Mean comparisons use Bonferroni correction within each dataset × loss type × rate family. Context tables report both Bonferroni correction within each context and across all valid comparisons at that rate. These are deliberately unpaired tests even when split identifiers overlap.
+Here `i` indexes pair-level rows, `n_i` is `n_points`, and `n_i * RMSE_i^2` is that row's SSE. Thus a context pair with more eligible cells receives more weight; context pairs are not equally weighted. The runtime performs unpaired, two-sided Mann–Whitney U tests on split-level pooled RMSE arrays, even when split identifiers overlap.
+
+Column Mean is a full competitor in every task where it is scored. Bonferroni correction covers every choose-two comparison in one dataset × task × rate headline family. Context outputs additionally correct every choose-two comparison within each map or ordered source-to-target pair and every valid comparison across all contexts at that rate. The `vs_colmean_*.csv` files are projections of the corresponding unified headline families: they retain the same raw p-value, Bonferroni p-value, and original family size and do not run a second baseline-only test.
+
+| Dataset/task | Methods | Headline comparisons per rate | Context comparisons per rate | Total headline | Total context | Column Mean projection rows |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Regular W, six rates | 5 | 10 | 80 (10 × 8 maps) | 60 | 480 | 24 |
+| Regular B1, six rates | 10 | 45 | 2,520 (45 × 56 ordered pairs) | 270 | 15,120 | 54 |
+| Regular B0, six rates | 5 | 10 | 560 (10 × 56 ordered pairs) | 60 | 3,360 | 24 |
+| No-double B1, rates 10, 40, 80, and 99 | 10 | 45 | 2,520 (45 × 56 ordered pairs) | 180 | 10,080 | Not published |
+| No-double B1, rate 999 | 7 | 21 | 1,176 (21 × 56 ordered pairs) | 21 | 1,176 | Not published |
+
+The complete no-double headline and context totals are therefore 201 and 11,256 rows. At rate `999`, the seven required methods are SingleAE, DualAE, MICE-PMM, MICE-RF, Basic Linear, 1-Param Nonlinear, and Column Mean.
 
 ### 9. Run the focused Trp165 analysis
 
@@ -386,7 +407,7 @@ PYTHONPATH=statistics/code python -m cli.generate_figures \
 
 ### Model predictions
 
-Regular outputs are under `$RUN_ROOT/data_splits`; no-double outputs for the five between-map families are under `$RUN_ROOT/data_splits_no_double_missing/tgt_TGT` with the same model directory patterns.
+Regular outputs are under `$RUN_ROOT/data_splits`; no-double outputs for the five between-map families plus target-only Column Mean are under `$RUN_ROOT/data_splits_no_double_missing/tgt_TGT` with the same model directory patterns.
 
 | Producer | Directory and filename | Granularity | Key contents |
 | --- | --- | --- | --- |
@@ -401,7 +422,7 @@ Regular outputs are under `$RUN_ROOT/data_splits`; no-double outputs for the fiv
 
 ### Loss inputs required by statistics
 
-All files are written to `$RUN_ROOT/splits_results_0506`. Rows are generally context/pair × rate × split summaries and include the eligible point counts used for pooled RMSE.
+All 14 required files are written to `$RUN_ROOT/splits_results_0506`. Rows are generally context/pair × rate × split summaries and include the eligible point counts used for pooled RMSE.
 
 | Producer | Fixed filename | Granularity | Key contents/columns |
 | --- | --- | --- | --- |
@@ -411,15 +432,18 @@ All files are written to `$RUN_ROOT/splits_results_0506`. Rows are generally con
 | `measure_loss_on_splits_RFmice2.py` | `mice_loss_measurements_all_splits_ratesrf2.csv` | Pair × regular rate × split | Adds within-map target RMSE for self-pairs plus regression/double-missing RMSE and counts. |
 | `measure_loss_on_splits_linearmodels.py` | `linear_model_loss_measurements_all_splits_rates2.csv` | Linear variant × pair × rate × split | `rmse_test`, `rmse_double_missing`, counts, model, rate, split, and `src-tgt`. |
 | `measure_loss_on_knn_imputer.py --sim_mode direct` | `blosum_knn_direct_rmse_all_splits.csv` | Column × regular rate × split | `test_fraction`, `split`, `model_file`, `column`, `loss`, `n_test`, `n_training`. |
-| `measure_loss_on_splits_colmean.py` | `col_mean_imputed_results.csv` | Column × regular rate × split | Same column-oriented loss/count schema. |
+| `measure_loss_on_splits_colmean.py` | `column_mean_task_losses_regular.csv` | W map or ordered B1/B0 pair × regular rate × split | Exact ordered columns `dataset,model,rate,split,src,tgt,shift_type,loss_type,rmse,n_points,sse,prediction_file,train_file,mask_file`; 36,000 rows for six rates × 50 splits. |
 | `pca_loss_measure.py` | `pca_rmse_results_all.csv` | Context × components × regular rate × split | `test`, `training`, counts, `rate`, `split`, `src-tgt`, `n_components`. |
 | `loss_measure_singleae_no_double_missing.py` | `single_AE3_rmse_no_double_missing.csv` | Pair × no-double target/rate/split | Regression RMSE/count plus identifiers and diagnostic buckets. |
 | `loss_measure_dualae_no_double_missing.py` | `dual_AE3_rmse_no_double_missing.csv` | Pair × no-double target/rate/split | Regression RMSE/count plus identifiers and diagnostic buckets. |
 | `loss_measure_mice_no_double_missing.py` | `mice_loss_no_double_missing.csv` | Pair × no-double target/rate/split | `rmse_regression`, counts, `model`, `target_context`, `rate`, `split`, `src-tgt`. |
 | `loss_measure_micerf_no_double_missing.py` | `mice_rf_loss_no_double_missing.csv` | Pair × no-double target/rate/split | Same MICE-style RMSE/count fields for RF. |
 | `loss_measure_linearmodels_no_double_missing.py` | `linear_model_loss_no_double_missing.csv` | Linear variant × pair × no-double target/rate/split | `rmse_test`, counts, model, target, rate, split, and `src-tgt`. |
+| `loss_measure_colmean_no_double_missing.py` | `column_mean_task_losses_no_double.csv` | Ordered B1 pair × no-double target/rate/split | The same exact ordered 14-column task-loss schema; 14,000 rows for five rates × 50 splits × eight targets × seven sources. |
 
-`pca_loss_measure.py` also writes per-component `pca_kK_rmse_results.csv` files, and standalone difference-mode KNN loss writes `blosum_knn_rmse_all_splits.csv`; neither is among the 13 required statistics inputs.
+For both task-loss files, `dataset` is `regular` or `no_double`, `model` is `col_mean`, `shift_type` is `self` or the assay-family transition, and `loss_type` is `within_map`, `regression_test`, or `double_missing` as applicable. `n_points` counts finite eligible held-out targets, `sse` is additive across rows, and the three provenance paths are nonblank run-root-relative paths. The statistics loader requires this exact column order and complete rate/split/context grids.
+
+`pca_loss_measure.py` also writes per-component `pca_kK_rmse_results.csv` files, and standalone difference-mode KNN loss writes `blosum_knn_rmse_all_splits.csv`; neither is among the 14 required statistics inputs.
 
 ### Variance decomposition
 
