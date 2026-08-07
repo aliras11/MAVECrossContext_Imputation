@@ -40,6 +40,21 @@ def _rates(frame: pd.DataFrame) -> list[int]:
     return sorted(int(rate) for rate in frame["rate"].unique())
 
 
+def _require_complete_headline_families(
+    pooled: pd.DataFrame, *, models: tuple[str, ...], rates: tuple[int, ...], expected_splits: int, label: str
+) -> None:
+    """Fail closed: publication MWU families must never silently shrink."""
+    expected_models = set(models)
+    expected_split_ids = set(range(1, expected_splits + 1))
+    for rate in rates:
+        selected = pooled.loc[pooled["rate"] == rate]
+        if set(selected["model"]) != expected_models:
+            raise ValueError(f"{label} rate={rate} has an incomplete model family")
+        for model in expected_models:
+            if set(selected.loc[selected["model"] == model, "split"]) != expected_split_ids:
+                raise ValueError(f"{label} rate={rate} model={model} has incomplete split coverage")
+
+
 def _validate_output_location(
     main_results_dir: Path,
     nodouble_results_dir: Path,
@@ -173,6 +188,13 @@ def build_statistics_tables(
     w_pooled = pool_rmse_by_split(w_raw)
     w_headline_pooled = w_pooled
     no_double_pooled = pool_rmse_by_split(filtered_no_double_raw)
+    _require_complete_headline_families(b1_pooled, models=B1_MODELS, rates=(10, 20, 40, 60, 80, 90), expected_splits=expected_splits, label="B1")
+    _require_complete_headline_families(b0_pooled, models=B0_MODELS, rates=(10, 20, 40, 60, 80, 90), expected_splits=expected_splits, label="B0")
+    _require_complete_headline_families(w_pooled, models=W_MODELS, rates=(10, 20, 40, 60, 80, 90), expected_splits=expected_splits, label="W")
+    nodouble_full = B1_MODELS
+    nodouble_999 = ("single_ae", "dual_ae", "mice", "mice_rf", "basic_linear", "oneparam_linear", "col_mean")
+    _require_complete_headline_families(no_double_pooled, models=nodouble_full, rates=(10, 40, 80, 99), expected_splits=expected_splits, label="no-double")
+    _require_complete_headline_families(no_double_pooled, models=nodouble_999, rates=(999,), expected_splits=expected_splits, label="no-double")
 
     tables = {
         "nodouble_model_rate_completeness.csv": no_double_audit,

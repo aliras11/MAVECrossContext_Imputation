@@ -200,12 +200,17 @@ def _parse_task_column_losses(
     path: Path, dataset: str, *, expected_splits: int = 50
 ) -> list[dict[str, Any]]:
     frame = pd.read_csv(path)
-    required = set(NORMALIZED_COLUMNS) | {
-        "sse", "prediction_file", "train_file", "mask_file"
-    }
-    missing = sorted(required - set(frame.columns))
-    if missing:
-        raise ValueError(f"task-matched Column Mean losses missing columns: {missing}")
+    required = [
+        "dataset", "model", "rate", "split", "src", "tgt", "shift_type",
+        "loss_type", "rmse", "n_points", "sse", "prediction_file",
+        "train_file", "mask_file",
+    ]
+    if list(frame.columns) != required:
+        raise ValueError("task-matched Column Mean losses must have exactly the Task 1 columns in order")
+    for column in ("prediction_file", "train_file", "mask_file"):
+        paths = frame[column].astype(str)
+        if paths.str.strip().eq("").any() or paths.eq(".").any() or paths.map(lambda value: Path(value).is_absolute() or ".." in Path(value).parts).any():
+            raise ValueError("task-matched Column Mean provenance paths must be nonblank run-root-relative paths")
     if set(frame["dataset"].astype(str)) != {dataset}:
         raise ValueError(f"task-matched Column Mean losses must use dataset={dataset!r}")
     if set(frame["model"].astype(str)) != {"col_mean"}:
