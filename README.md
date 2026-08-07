@@ -2,7 +2,6 @@
 
 This runtime-only repository reproduces the MTHFR missing-data workflow: split and mask generation, imputation, loss measurement, variance decomposition, manuscript statistics, the focused Trp165 analysis, figure generation, and Pitt Slurm submission. It contains the executable Python, R, and shell code; one authoritative full-data CSV; archival source-score CSVs; required runtime metadata and resources; packaging metadata for the statistics commands; the license; and this guide.
 
-It intentionally contains no tests or fixtures, development plans or reports, exploratory or obsolete code, generated splits, predictions, result tables, decomposition products, figures, manifests, scheduler logs, or Word/PDF/LaTeX/supplement-generation code. Generated scientific data products belong outside the checkout. The bundled Pitt wrappers may create ignored scheduler logs under `cluster/` or `cluster/logs/` while jobs run.
 
 ## Repository layout
 
