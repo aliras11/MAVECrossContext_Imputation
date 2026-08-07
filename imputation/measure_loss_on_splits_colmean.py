@@ -116,13 +116,22 @@ def align_frames(
     )
 
 
+def _numeric_values(values: pd.Series, *, column: str, label: str) -> pd.Series:
+    converted = pd.to_numeric(values, errors="coerce")
+    invalid = values.notna() & converted.isna()
+    if invalid.any():
+        examples = values.loc[invalid].astype(str).drop_duplicates().head(3).tolist()
+        raise ValueError(
+            f"{label} column {column!r} contains {int(invalid.sum())} "
+            f"nonnumeric nonmissing value(s); examples={examples}"
+        )
+    return converted
+
+
 def _numeric(frame: pd.DataFrame, column: str, label: str) -> pd.Series:
     if column not in frame.columns:
         raise ValueError(f"{label} is missing required column {column!r}")
-    converted = pd.to_numeric(frame[column], errors="coerce")
-    if (frame[column].notna() & converted.isna()).any():
-        raise ValueError(f"{label} column {column!r} contains nonnumeric nonmissing values")
-    return converted
+    return _numeric_values(frame[column], column=column, label=label)
 
 
 def _finite(values: pd.Series) -> pd.Series:
@@ -132,16 +141,24 @@ def _finite(values: pd.Series) -> pd.Series:
     )
 
 
-def _validate_target_mask(mask: pd.Series, *, target: str) -> None:
+def _validate_target_mask(mask: pd.Series, *, column: str) -> None:
     if mask.isna().any() or not mask.isin({0, 1}).all():
-        raise ValueError(f"mask column {target}_score must contain only 0 or 1")
+        raise ValueError(f"mask column {column} must contain only 0 or 1")
 
 
-def _same_including_missing(left: pd.Series, right: pd.Series) -> bool:
-    left_numeric = pd.to_numeric(left, errors="coerce")
-    right_numeric = pd.to_numeric(right, errors="coerce")
+def _same_including_missing(
+    left: pd.Series,
+    right: pd.Series,
+    *,
+    column: str,
+    left_label: str,
+    right_label: str,
+) -> bool:
+    left_numeric = _numeric_values(left, column=column, label=left_label)
+    right_numeric = _numeric_values(right, column=column, label=right_label)
     both_missing = left_numeric.isna() & right_numeric.isna()
     both_finite = left_numeric.notna() & right_numeric.notna()
+    # Permit only ordinary CSV round-trip and group-mean floating-point noise.
     return bool(
         (both_missing | both_finite).all()
         and np.isclose(left_numeric.loc[both_finite], right_numeric.loc[both_finite], rtol=1e-8, atol=1e-10).all()
@@ -159,11 +176,17 @@ def _validate_target_artifacts(
             _numeric(full, column, "full data"), _numeric(train, column, "train split"),
             _numeric(mask, column, "mask"),
         )
-        _validate_target_mask(mask_values, target=target)
+        _validate_target_mask(mask_values, column=column)
         held = mask_values.eq(1)
         if not _finite(full_values.loc[held]).all() or _finite(train_values.loc[held]).any():
             raise ValueError(f"target artifact contradiction for {target}: mask-1 {suffix} must be finite in full and missing in train")
-        if not _same_including_missing(train_values.loc[~held], full_values.loc[~held]):
+        if not _same_including_missing(
+            train_values.loc[~held],
+            full_values.loc[~held],
+            column=column,
+            left_label="train split",
+            right_label="full data",
+        ):
             raise ValueError(f"target artifact contradiction for {target}: mask-0 {suffix} differs from full data")
         target_masks[suffix] = mask_values
     if not target_masks["score"].eq(target_masks["se"]).all():
@@ -174,7 +197,13 @@ def _validate_target_artifacts(
         raise ValueError("train split is missing pos_aminoacid for Column Mean reconstruction")
     expected = train_score.fillna(train.groupby("pos_aminoacid")[score].transform("mean")).fillna(train_score.mean())
     actual = _numeric(prediction, score, "prediction")
-    if not _same_including_missing(actual, expected):
+    if not _same_including_missing(
+        actual,
+        expected,
+        column=score,
+        left_label="prediction",
+        right_label="deterministic Column Mean reconstruction",
+    ):
         raise ValueError(f"prediction artifact for {target}_score does not match deterministic Column Mean reconstruction")
     if no_double:
         for context in CONTEXTS:
@@ -184,8 +213,22 @@ def _validate_target_artifacts(
                 if mask_values.isna().any() or not mask_values.isin({0, 1}).all():
                     raise ValueError(f"no-double mask column {column} must contain only 0 or 1")
                 if context != target:
-                    if not mask_values.eq(0).all() or not _same_including_missing(train[column], full[column]):
-                        raise ValueError(f"no-double split violates non-target artifact contract for {column}")
+                    if not mask_values.eq(0).all():
+                        raise ValueError(
+                            "no-double split violates non-target artifact contract "
+                            f"for {column}: mask must be zero for every row"
+                        )
+                    if not _same_including_missing(
+                        train[column],
+                        full[column],
+                        column=column,
+                        left_label="no-double train split",
+                        right_label="full data",
+                    ):
+                        raise ValueError(
+                            "no-double split violates non-target artifact contract "
+                            f"for {column}: train split differs from full data"
+                        )
 
 
 def _shift_type(source: str, target: str) -> str:
@@ -227,7 +270,7 @@ def _score_row(
     truth = _numeric(full_df, target_column, "full data")
     prediction = _numeric(prediction_df, target_column, "prediction")
     target_mask = _numeric(mask_df, target_column, "mask")
-    _validate_target_mask(target_mask, target=target)
+    _validate_target_mask(target_mask, column=target_column)
 
     selected = target_mask.eq(1)
     if task == "B1" or task == "B0":
