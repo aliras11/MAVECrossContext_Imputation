@@ -196,6 +196,19 @@ def _parse_column_loss(
     return rows
 
 
+def _parse_task_column_losses(path: Path, dataset: str) -> list[dict[str, Any]]:
+    frame = pd.read_csv(path)
+    required = set(NORMALIZED_COLUMNS) | {"sse"}
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise ValueError(f"task-matched Column Mean losses missing columns: {missing}")
+    if set(frame["dataset"].astype(str)) != {dataset}:
+        raise ValueError(f"task-matched Column Mean losses must use dataset={dataset!r}")
+    if set(frame["model"].astype(str)) != {"col_mean"}:
+        raise ValueError("task-matched Column Mean losses must use model='col_mean'")
+    return frame.loc[:, NORMALIZED_COLUMNS].to_dict("records")
+
+
 def _parse_pca(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for _, row in pd.read_csv(path).iterrows():
@@ -245,9 +258,8 @@ def load_main_results(results_dir: Path) -> pd.DataFrame:
         paths["blosum_knn_direct_rmse_all_splits.csv"],
         "knn", "_score_imputed",
     ))
-    rows.extend(_parse_column_loss(
-        paths["col_mean_imputed_results.csv"],
-        "col_mean", "_score",
+    rows.extend(_parse_task_column_losses(
+        paths["column_mean_task_losses_regular.csv"], "regular"
     ))
     rows.extend(_parse_pca(paths["pca_rmse_results_all.csv"]))
     return _normalized_frame(rows, "regular")
@@ -276,5 +288,8 @@ def load_nodouble_results(results_dir: Path) -> pd.DataFrame:
     rows.extend(_parse_linear(
         paths["linear_model_loss_no_double_missing.csv"],
         include_double=False,
+    ))
+    rows.extend(_parse_task_column_losses(
+        paths["column_mean_task_losses_no_double.csv"], "no_double"
     ))
     return _normalized_frame(rows, "no_double")

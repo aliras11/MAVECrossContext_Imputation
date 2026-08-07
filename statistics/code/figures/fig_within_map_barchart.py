@@ -75,14 +75,20 @@ def main(
             continue
         best_idx = finite[np.argmin(means[finite, j])]
         best_model = plot_models[best_idx]
+        if np.isfinite(cm_means[j]) and cm_means[j] < means[best_idx, j]:
+            best_model = "col_mean"
         if fh.best_model_is_significant(
             pairwise,
             rate=rate,
             best_model=best_model,
+            displayed_models=set(plot_models) | {"col_mean"},
         ):
-            offset, m, s = bar_containers[best_model]
-            bar_x = x[j] + offset
-            marker_y = m[j] + s[j] * 1.96 + 0.006
+            if best_model == "col_mean":
+                bar_x, marker_y = x[j], cm_means[j] + 0.006
+            else:
+                offset, m, s = bar_containers[best_model]
+                bar_x = x[j] + offset
+                marker_y = m[j] + s[j] * 1.96 + 0.006
             ax.plot(bar_x, marker_y, '*', markersize=12, color='gold',
                     markeredgecolor='black', markeredgewidth=0.5, zorder=10)
 

@@ -144,10 +144,13 @@ def best_model_is_significant(
     *,
     rate: int,
     best_model: str,
+    displayed_models: set[str] | None = None,
 ) -> bool:
     """Return whether the best bar differs from every displayed opponent."""
     rate_rows = pairwise.loc[pairwise["rate"] == rate]
     all_models = set(rate_rows["model_a"]) | set(rate_rows["model_b"])
+    if displayed_models is not None and all_models != set(displayed_models):
+        return False
     expected_opponents = all_models - {best_model}
     selected = rate_rows.loc[
         (rate_rows["model_a"] == best_model)

@@ -12,7 +12,7 @@ REGULAR_RESULT_FILES = (
     "mice_loss_measurements_all_splits_ratesrf2.csv",
     "linear_model_loss_measurements_all_splits_rates2.csv",
     "blosum_knn_direct_rmse_all_splits.csv",
-    "col_mean_imputed_results.csv",
+    "column_mean_task_losses_regular.csv",
     "pca_rmse_results_all.csv",
 )
 
@@ -22,6 +22,7 @@ NODOUBLE_RESULT_FILES = (
     "mice_loss_no_double_missing.csv",
     "mice_rf_loss_no_double_missing.csv",
     "linear_model_loss_no_double_missing.csv",
+    "column_mean_task_losses_no_double.csv",
 )
 
 MODEL_DISPLAY_NAMES = {
@@ -42,10 +43,10 @@ MODEL_DISPLAY_NAMES = {
 B1_MODELS = (
     "single_ae", "dual_ae", "mice", "mice_rf", "basic_linear",
     "oneparam_linear", "full_interaction_linear", "mixed_random",
-    "full_interaction_mixed",
+    "full_interaction_mixed", "col_mean",
 )
-B0_MODELS = ("single_ae", "dual_ae", "mice", "mice_rf")
-W_MODELS = ("single_ae", "mice_rf", "knn", "pca_k1")
+B0_MODELS = ("single_ae", "dual_ae", "mice", "mice_rf", "col_mean")
+W_MODELS = ("single_ae", "mice_rf", "knn", "pca_k1", "col_mean")
 REGULAR_RATES = (10, 20, 40, 60, 80, 90)
 NODOUBLE_RATES = (10, 40, 80, 99, 999)
 

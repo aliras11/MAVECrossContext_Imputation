@@ -35,6 +35,7 @@ def main(
     )
     remaining = sorted(set(summary["model"]) - set(mid_rate_order))
     order = [*mid_rate_order, *remaining]
+    order = [model for model in order if model != "col_mean"]
 
     n_methods = len(order)
     n_rates = len(plot_rates)
@@ -48,6 +49,10 @@ def main(
         summary.pivot(index="model", columns="rate", values="se_rmse")
         .reindex(index=order, columns=plot_rates)
         .to_numpy()
+    )
+    cm_means = (
+        summary.loc[summary["model"] == "col_mean"]
+        .set_index("rate")["mean_rmse"].reindex(plot_rates).to_numpy()
     )
 
     # Plot
@@ -74,16 +79,28 @@ def main(
             continue
         best_idx = finite[np.argmin(means[finite, j])]
         best_model = order[best_idx]
+        if np.isfinite(cm_means[j]) and cm_means[j] < means[best_idx, j]:
+            best_model = "col_mean"
         if fh.best_model_is_significant(
             pairwise,
             rate=rate,
             best_model=best_model,
+            displayed_models=set(order) | {"col_mean"},
         ):
-            offset, m, s = bar_containers[best_model]
-            bar_x = x[j] + offset
-            marker_y = m[j] + s[j] * 1.96 + 0.006
+            if best_model == "col_mean":
+                bar_x, marker_y = x[j], cm_means[j] + 0.006
+            else:
+                offset, m, s = bar_containers[best_model]
+                bar_x = x[j] + offset
+                marker_y = m[j] + s[j] * 1.96 + 0.006
             ax.plot(bar_x, marker_y, '*', markersize=12, color='gold',
                     markeredgecolor='black', markeredgewidth=0.5, zorder=10)
+
+    for j, rate in enumerate(plot_rates):
+        if np.isfinite(cm_means[j]):
+            ax.hlines(cm_means[j], x[j] - 0.42, x[j] + 0.42,
+                      colors='red', linestyles='--', linewidth=1.8, alpha=0.7,
+                      label='Column Mean baseline' if j == 0 else None)
 
     ax.set_xlabel('Saturation (%)')
     ax.set_ylabel('Mean RMSE (\u00b1 95% CI)')

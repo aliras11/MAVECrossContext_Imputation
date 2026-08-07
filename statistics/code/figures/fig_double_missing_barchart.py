@@ -21,10 +21,6 @@ def main(
         "rmse_summary_double_missing.csv",
         "pairwise_mwu_double_missing.csv",
     )
-    within_summary = fh.load_summary_panel_data(
-        statistics_dir,
-        "rmse_summary_within_map.csv",
-    )
 
     # Order models by mean RMSE at rate 40
     order = (
@@ -32,6 +28,7 @@ def main(
         .sort_values("mean_rmse")["model"]
         .tolist()
     )
+    order = [model for model in order if model != "col_mean"]
 
     n_methods = len(order)
     n_rates = len(plot_rates)
@@ -47,7 +44,7 @@ def main(
         .to_numpy()
     )
     cm_means = (
-        within_summary.loc[within_summary["model"] == "col_mean"]
+        summary.loc[summary["model"] == "col_mean"]
         .set_index("rate")["mean_rmse"]
         .reindex(plot_rates)
         .to_numpy()
@@ -77,14 +74,20 @@ def main(
             continue
         best_idx = finite[np.argmin(means[finite, j])]
         best_model = order[best_idx]
+        if np.isfinite(cm_means[j]) and cm_means[j] < means[best_idx, j]:
+            best_model = "col_mean"
         if fh.best_model_is_significant(
             pairwise,
             rate=rate,
             best_model=best_model,
+            displayed_models=set(order) | {"col_mean"},
         ):
-            offset, m, s = bar_containers[best_model]
-            bar_x = x[j] + offset
-            marker_y = m[j] + s[j] * 1.96 + 0.006
+            if best_model == "col_mean":
+                bar_x, marker_y = x[j], cm_means[j] + 0.006
+            else:
+                offset, m, s = bar_containers[best_model]
+                bar_x = x[j] + offset
+                marker_y = m[j] + s[j] * 1.96 + 0.006
             ax.plot(bar_x, marker_y, '*', markersize=12, color='gold',
                     markeredgecolor='black', markeredgewidth=0.5, zorder=10)
 

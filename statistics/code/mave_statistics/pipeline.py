@@ -7,7 +7,7 @@ import pandas as pd
 
 from .constants import B0_MODELS, B1_MODELS, NODOUBLE_RATES, W_MODELS
 from .inference import (
-    baseline_mwu,
+    baseline_view_from_headline,
     context_pairwise_mwu,
     headline_pairwise_mwu,
 )
@@ -172,7 +172,7 @@ def build_statistics_tables(
         main,
         dataset="regular",
         loss_type="within_map",
-        models=(*W_MODELS, "col_mean"),
+        models=W_MODELS,
     )
     no_double_raw = _family(
         no_double,
@@ -190,9 +190,7 @@ def build_statistics_tables(
     b1_pooled = pool_rmse_by_split(b1_raw)
     b0_pooled = pool_rmse_by_split(b0_raw)
     w_pooled = pool_rmse_by_split(w_raw)
-    w_headline_pooled = w_pooled.loc[
-        w_pooled["model"].isin(W_MODELS)
-    ].copy()
+    w_headline_pooled = w_pooled
     no_double_pooled = pool_rmse_by_split(filtered_no_double_raw)
 
     tables = {
@@ -211,7 +209,6 @@ def build_statistics_tables(
             w_headline_pooled,
             dataset="regular",
             loss_type="within_map",
-            excluded_models=("col_mean",),
         ),
         "pairwise_mwu_nodouble_regression_test.csv": _headline_tables(
             no_double_pooled,
@@ -223,24 +220,6 @@ def build_statistics_tables(
         "rmse_summary_within_map.csv": summarize_pooled(w_pooled),
         "rmse_summary_nodouble_regression_test.csv": summarize_pooled(
             no_double_pooled
-        ),
-        "vs_colmean_regression_test.csv": _baseline_tables(
-            b1_pooled,
-            w_pooled,
-            dataset="regular",
-            loss_type="regression_test",
-        ),
-        "vs_colmean_double_missing.csv": _baseline_tables(
-            b0_pooled,
-            w_pooled,
-            dataset="regular",
-            loss_type="double_missing",
-        ),
-        "vs_colmean_within_map.csv": _baseline_tables(
-            w_pooled,
-            w_pooled,
-            dataset="regular",
-            loss_type="within_map",
         ),
         "pairwise_mwu_by_context_regression_test.csv": _context_tables(
             b1_raw,
@@ -265,7 +244,6 @@ def build_statistics_tables(
             expected_splits=expected_splits,
             minimum_completeness=minimum_completeness,
             requested_models=W_MODELS,
-            excluded_models=("col_mean",),
         ),
         "pairwise_mwu_by_context_nodouble_regression_test.csv": (
             _nodouble_context_tables(
@@ -275,6 +253,9 @@ def build_statistics_tables(
             )
         ),
     }
+    tables["vs_colmean_regression_test.csv"] = baseline_view_from_headline(tables["pairwise_mwu_regression_test.csv"])
+    tables["vs_colmean_double_missing.csv"] = baseline_view_from_headline(tables["pairwise_mwu_double_missing.csv"])
+    tables["vs_colmean_within_map.csv"] = baseline_view_from_headline(tables["pairwise_mwu_within_map.csv"])
     return tables
 
 

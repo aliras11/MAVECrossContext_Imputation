@@ -259,6 +259,42 @@ def baseline_mwu(
     return result[BASELINE_COLUMNS]
 
 
+def baseline_view_from_headline(
+    pairwise: pd.DataFrame, *, baseline_model: str = "col_mean"
+) -> pd.DataFrame:
+    """Project unified all-method comparisons onto Column Mean comparisons."""
+    rows = []
+    for row in pairwise.itertuples(index=False):
+        if baseline_model not in (row.model_a, row.model_b):
+            continue
+        model_is_a = row.model_a != baseline_model
+        model = row.model_a if model_is_a else row.model_b
+        method = row.method_a if model_is_a else row.method_b
+        baseline_method = row.method_b if model_is_a else row.method_a
+        mean_model = row.mean_rmse_a if model_is_a else row.mean_rmse_b
+        mean_baseline = row.mean_rmse_b if model_is_a else row.mean_rmse_a
+        median_model = row.median_rmse_a if model_is_a else row.median_rmse_b
+        median_baseline = row.median_rmse_b if model_is_a else row.median_rmse_a
+        rows.append({
+            "dataset": row.dataset, "loss_type": row.loss_type, "rate": row.rate,
+            "model": model, "method": method, "baseline_model": baseline_model,
+            "baseline_method": baseline_method,
+            "n_splits_model": row.n_splits_a if model_is_a else row.n_splits_b,
+            "n_splits_baseline": row.n_splits_b if model_is_a else row.n_splits_a,
+            "mean_rmse_model": mean_model, "mean_rmse_baseline": mean_baseline,
+            "mean_diff_model_minus_baseline": mean_model - mean_baseline,
+            "median_rmse_model": median_model, "median_rmse_baseline": median_baseline,
+            "median_diff_model_minus_baseline": median_model - median_baseline,
+            "pct_improvement": 100 * (median_baseline - median_model) / median_baseline,
+            "U": row.U, "p_raw": row.p_raw, "p_bonferroni": row.p_bonferroni,
+            "significant_0_05": row.significant_0_05,
+            "better_than_baseline": median_model < median_baseline,
+            "analysis_unit": row.analysis_unit, "correction_method": row.correction_method,
+            "correction_family": row.correction_family, "family_size": row.family_size,
+        })
+    return pd.DataFrame(rows, columns=BASELINE_COLUMNS)
+
+
 def _reject_duplicate_context_model_splits(
     frame: pd.DataFrame,
     *,
