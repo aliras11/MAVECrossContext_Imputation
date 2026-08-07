@@ -165,6 +165,34 @@ def _same_including_missing(
     )
 
 
+def _validate_training_grouping_key(
+    full: pd.DataFrame, train: pd.DataFrame
+) -> None:
+    column = "pos_aminoacid"
+    if column not in train.columns:
+        raise ValueError(
+            "train split is missing pos_aminoacid for Column Mean reconstruction"
+        )
+    if column not in full.columns:
+        raise ValueError(
+            "full data is missing pos_aminoacid for Column Mean reconstruction"
+        )
+    full_values = full[column]
+    train_values = train[column]
+    both_missing = full_values.isna() & train_values.isna()
+    both_present = full_values.notna() & train_values.notna()
+    matching = both_missing | (both_present & train_values.eq(full_values))
+    if not matching.all():
+        examples = (
+            full.loc[~matching, "hgvs_pro"].astype(str).drop_duplicates().head(3).tolist()
+        )
+        raise ValueError(
+            "train split column 'pos_aminoacid' differs from full data "
+            f"including missingness at {int((~matching).sum())} aligned row(s); "
+            f"hgvs_pro examples={examples}"
+        )
+
+
 def _validate_target_artifacts(
     full: pd.DataFrame, train: pd.DataFrame, mask: pd.DataFrame,
     prediction: pd.DataFrame, *, target: str, no_double: bool,
@@ -193,8 +221,7 @@ def _validate_target_artifacts(
         raise ValueError(f"target artifact contradiction for {target}: score and SE masks differ")
     score = f"{target}_score"
     train_score = _numeric(train, score, "train split")
-    if "pos_aminoacid" not in train:
-        raise ValueError("train split is missing pos_aminoacid for Column Mean reconstruction")
+    _validate_training_grouping_key(full, train)
     expected = train_score.fillna(train.groupby("pos_aminoacid")[score].transform("mean")).fillna(train_score.mean())
     actual = _numeric(prediction, score, "prediction")
     if not _same_including_missing(
@@ -218,9 +245,11 @@ def _validate_target_artifacts(
                             "no-double split violates non-target artifact contract "
                             f"for {column}: mask must be zero for every row"
                         )
+                    train_values = _numeric(train, column, "no-double train split")
+                    full_values = _numeric(full, column, "full data")
                     if not _same_including_missing(
-                        train[column],
-                        full[column],
+                        train_values,
+                        full_values,
                         column=column,
                         left_label="no-double train split",
                         right_label="full data",
@@ -349,10 +378,19 @@ def build_task_loss_rows(
     for target in targets:
         if target not in CONTEXTS:
             raise ValueError(f"unknown target context: {target}")
-        _validate_target_artifacts(
-            full, train, mask, prediction, target=target,
-            no_double=dataset == "no_double",
-        )
+        try:
+            _validate_target_artifacts(
+                full, train, mask, prediction, target=target,
+                no_double=dataset == "no_double",
+            )
+        except ValueError as error:
+            raise ValueError(
+                "Column Mean artifact validation failed for "
+                f"dataset={dataset} rate={rate} split={split} target={target} "
+                f"train_file={paths['train_file']} "
+                f"mask_file={paths['mask_file']} "
+                f"prediction_file={paths['prediction_file']}: {error}"
+            ) from error
         if include_within:
             rows.append(
                 _score_row(
