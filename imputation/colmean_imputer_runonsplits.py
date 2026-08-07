@@ -15,12 +15,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("--num-splits", type=int, default=50, help="Number of split indices to process (starting at 1).")
     parser.add_argument("--missing-rate", type=int, default=10, help="Missing rate used when selecting split files.")
-    args, _unknown = parser.parse_known_args()
+    args = parser.parse_args()
 
     base_dir = args.base_dir
     num_splits = args.num_splits
     missing_rate = args.missing_rate
-    out_sub_tpl = Path(f"mean_imputed_{missing_rate}")
 
     for split_number in range(1, num_splits + 1):
         try:
@@ -46,10 +45,14 @@ if __name__ == "__main__":
             col_global_mean = train_df[col].mean()
             train_df[col] = train_df[col].fillna(per_group_mean)
             train_df[col] = train_df[col].fillna(col_global_mean)
-        out_subdirectory = out_sub_tpl / Path(f"split_{split_number}")
+        out_subdirectory = Path(
+            args.out_subdirectory.format(
+                split_number=split_number,
+                missing_rate=missing_rate,
+            )
+        )
         out_dir = Path(base_dir) / out_subdirectory
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f'mean_imputed_split{split_number}.csv'
         print(out_path)
         train_df.to_csv(out_path, index=False)
-        

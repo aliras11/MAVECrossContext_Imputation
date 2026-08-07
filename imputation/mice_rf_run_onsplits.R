@@ -25,7 +25,7 @@ suppressPackageStartupMessages({
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) != 2) {
-  cat("Usage: Rscript mice_runonsplitsv1.2.R <splits_dir> <test_rate>\n")
+  cat("Usage: Rscript mice_rf_run_onsplits.R <splits_dir> <test_rate>\n")
   quit(status = 1)
 }
 

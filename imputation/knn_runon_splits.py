@@ -258,7 +258,11 @@ def main():
     parser.add_argument(
         "--out-subdir",
         default=None,
-        help="Output folder name under base-dir. Default: blosum_knn_{rate}_{matrix}_k{k}_w{pos_window}",
+        help=(
+            "Output folder name under base-dir. Default: "
+            "blosum_knn_{rate}_{matrix}_k{k}_w{pos_window}; appends "
+            "_direct when --sim_mode direct."
+        ),
     )
 
     args = parser.parse_args()

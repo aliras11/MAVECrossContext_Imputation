@@ -39,7 +39,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run DualAE imputation across pre-generated splits.")
     parser.add_argument("--base-dir", default="../data_splits", help="Base directory containing split CSVs (train/mask).")
     parser.add_argument(
-        "--out-subdirectory"
+        "--out-subdirectory",
+        default="Dual_AE3_testfrac{missing_rate}/split_{split_number}",
+        help="Output subdirectory template. You can use {split_number} and {missing_rate} placeholders.",
     )
     parser.add_argument("--num-splits", type=int, default=50, help="Number of splits to process (1..N).")
     parser.add_argument("--missing-rate", type=int, default=10, help="Missing rate used to select split files.")
@@ -48,7 +50,6 @@ if __name__ == "__main__":
     base_dir = args.base_dir
     num_splits = args.num_splits
     missing_rate = args.missing_rate
-    out_sub_tpl = f"Dual_AE3_testfrac{missing_rate}"
 
     for split_number in range(1, num_splits + 1):
         print(f"Processing split {split_number} (rate={missing_rate})")
@@ -109,7 +110,12 @@ if __name__ == "__main__":
             'wt200': (wt200_tensor, wt200_mask),
         }
 
-        out_subdirectory = out_sub_tpl/Path(f"split_{split_number}")
+        out_subdirectory = Path(
+            args.out_subdirectory.format(
+                split_number=split_number,
+                missing_rate=missing_rate,
+            )
+        )
         out_dir = Path(base_dir) / out_subdirectory
         out_dir.mkdir(parents=True, exist_ok=True)
 

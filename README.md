@@ -51,7 +51,7 @@ The R runners require R plus `optparse`, `data.table`, `mice`, `lme4`, `miceRang
 
 ## Authoritative input and terminology
 
-`data/mthfr_crossAllcontext_domainannotation.csv` is the only tracked full dataset. It is 4,069,375 bytes, with 13,192 data rows and 24 columns. Its SHA-256 is:
+`data/mthfr_crossAllcontext_domainannotation.csv` is the sole authoritative runtime full-data CSV. It is 4,069,375 bytes, with 13,192 data rows and 24 columns. Its SHA-256 is:
 
 ```text
 ed503e4cba97c46cfa5c1be7f2084d9f6ab535bbfe7db101faff146b75a81e4a
@@ -504,7 +504,7 @@ The decomposition output root also contains an internal task manifest, shard CSV
 - Statistics were consolidated from base commit `6ec548979781495f5cea6e39b2e106c8464cfc8d` plus the intentional production working-tree updates present at consolidation time.
 - Decomposition recognizes the exact legacy corrected commits `aa9ad790d3cd1001f785f16cf3856c3e1ea67755` and `e6a62ccacfb4340baa3827394cad2add23ec73ad`. In this fresh history it also recognizes consolidated corrected root `09bf3c9fc7e150947015c8ed1c428483936d97e3` and its descendants.
 - The authoritative CSV checksum is `ed503e4cba97c46cfa5c1be7f2084d9f6ab535bbfe7db101faff146b75a81e4a`; verify the staged external copy against it.
-- This repository has a clean new history. Earlier histories were not imported, no remote is configured by the consolidation, and nothing was pushed.
+- This repository has a clean new history; earlier development histories were not imported. Configure the desired remote explicitly before publishing or cloning it into a production run root.
 - Generated scientific outputs are intentionally external and ignored. Pitt scheduler logs are also ignored but are written under `cluster/` or `cluster/logs/` by the bundled wrappers. The wrappers preserve established run-root, environment, partition, memory, time, and output conventions; adapt them for other systems.
 - Split generation uses base seed 42 plus the zero-based split index. SingleAE and DualAE pass PyTorch seed 42 for each fit. MICE-PMM and MICE-RF use R seed 123. Other methods are deterministic conditional on their inputs and library behavior. Seeds improve repeatability but do not promise bitwise-identical results across package versions, hardware, thread schedules, or CPU/GPU backends.
 - The no-double master includes all five required labels in one graph, with `999` generated only from raw `99.9%` missingness. The regular master generates both KNN modes and explicitly evaluates direct KNN. All 13 required loss CSVs are co-located in `$RUN_ROOT/splits_results_0506`.

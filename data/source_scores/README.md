@@ -1,8 +1,7 @@
 # Archived MTHFR source-score exports
 
 These 51 CSV files were copied without content changes on 2026-08-06 from the
-local MTHFR score-processing workspace at
-`/Users/ser219/Desktop/mthfr_scores/newmtfhr_scores`.
+project's local MTHFR score-processing workspace.
 
 ## Contents
 
@@ -18,9 +17,11 @@ local MTHFR score-processing workspace at
   `../mthfr_crossAllcontext_domainannotation.csv`.
 - `mthfr_excel_scores.csv`: the accompanying combined score table.
 
-These archival files are not consumed by the current pipeline. Split generation
-and all downstream analyses use only
-`data/mthfr_crossAllcontext_domainannotation.csv`.
+These archival files are not consumed directly by the current pipeline. Split
+generation, imputation, and loss measurement read the authoritative repository
+CSV. Variance decomposition and the Trp165 analysis read a checksum-identical
+copy staged under the run root, and the statistics commands read the resulting
+loss tables.
 
 The source folder's ZIP archives were omitted because they duplicate the CSV
 directories. Its notebooks, helper scripts, and `.DS_Store` file were also

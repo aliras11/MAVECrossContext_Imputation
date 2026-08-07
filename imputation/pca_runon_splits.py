@@ -8,8 +8,8 @@ Outputs one CSV per split (like colmean imputer) with all 8 score columns
 imputed via PCA reconstruction.
 
 Usage:
-    python pca_imputer.py --base-dir ../data_splits --num-splits 5 --missing-rate 40 --n-components 1
-    python pca_imputer.py --base-dir ../data_splits --all-rates --n-components 2
+    python pca_runon_splits.py --base-dir ../data_splits --num-splits 5 --missing-rate 40 --n-components 1
+    python pca_runon_splits.py --base-dir ../data_splits --all-rates --n-components 2
 """
 import argparse
 import warnings

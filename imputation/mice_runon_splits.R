@@ -9,14 +9,13 @@ suppressPackageStartupMessages({
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) != 2) {
-  cat("Usage: Rscript mice_runonsplitsv1.2.R <splits_dir> <output_base_dir> <test_rate>\n")
-  ##cat("Example: Rscript mice_runonsplitsv1.2.R /path/to/data_splits /path/to/output 10\n")
+  cat("Usage: Rscript mice_runon_splits.R <splits_dir> <test_rate>\n")
+  cat("Example: Rscript mice_runon_splits.R /path/to/data_splits 10\n")
   quit(status = 1)
 }
 
 # Get arguments from command line
 splits_dir <- args[1]
-#output_base_dir <- args[2]
 test_rate <- as.integer(args[2])
 
 # Fixed settings (unchanged)
