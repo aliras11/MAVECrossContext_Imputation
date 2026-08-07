@@ -1,6 +1,6 @@
 # MAVE Imputation Pipeline
 
-This runtime-only repository reproduces the MTHFR missing-data workflow: split and mask generation, imputation, loss measurement, variance decomposition, manuscript statistics, the focused Trp165 analysis, figure generation, and Pitt Slurm submission. It contains the executable Python, R, and shell code; one authoritative full-data CSV; required runtime metadata and resources; packaging metadata for the statistics commands; the license; and this guide.
+This runtime-only repository reproduces the MTHFR missing-data workflow: split and mask generation, imputation, loss measurement, variance decomposition, manuscript statistics, the focused Trp165 analysis, figure generation, and Pitt Slurm submission. It contains the executable Python, R, and shell code; one authoritative full-data CSV; archival source-score CSVs; required runtime metadata and resources; packaging metadata for the statistics commands; the license; and this guide.
 
 It intentionally contains no tests or fixtures, development plans or reports, exploratory or obsolete code, generated splits, predictions, result tables, decomposition products, figures, manifests, scheduler logs, or Word/PDF/LaTeX/supplement-generation code. Generated scientific data products belong outside the checkout. The bundled Pitt wrappers may create ignored scheduler logs under `cluster/` or `cluster/logs/` while jobs run.
 
@@ -8,7 +8,7 @@ It intentionally contains no tests or fixtures, development plans or reports, ex
 
 | Path | Contents |
 | --- | --- |
-| `data/` | The single authoritative MTHFR full-data CSV. |
+| `data/` | The authoritative MTHFR full-data CSV and archival source-score exports. |
 | `imputation/` | Split generators, model runners, loss scripts, shared model/preprocessing code, `runtime_paths.py`, and the bundled BLOSUM100 matrix. |
 | `imputation/decomposition/` | Prediction-layout metadata, event definitions, sufficient-statistics builder, summaries, validation, and local/Slurm orchestration. |
 | `statistics/` | Installable statistics, Trp165, and figure commands plus their Python implementation. |
@@ -56,6 +56,19 @@ The R runners require R plus `optparse`, `data.table`, `mice`, `lme4`, `miceRang
 ```text
 ed503e4cba97c46cfa5c1be7f2084d9f6ab535bbfe7db101faff146b75a81e4a
 ```
+
+`data/source_scores/` contains 51 archival CSVs supplied with the MTHFR score
+processing workspace: 24 wild-type-background exports, 24 A222V-background
+exports, and three combined or intermediate tables. These files are retained
+for data provenance and are not read by the split, imputation, decomposition,
+or statistics commands. In particular,
+`data/source_scores/mthfr_crossAllcontext_domainannotation_new.csv` is a
+byte-for-byte copy of the authoritative CSV above. The runtime pipeline
+continues to use only `data/mthfr_crossAllcontext_domainannotation.csv`.
+
+The source-data copy deliberately excludes duplicate ZIP archives, notebooks,
+helper scripts, and operating-system metadata. See `data/source_scores/README.md`
+for the inventory and provenance boundary.
 
 The exact header order is:
 
