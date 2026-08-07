@@ -1,7 +1,7 @@
 #!/bin/bash
 # Master script: submit the full no-double-missing pipeline with SLURM dependencies
 # Stage 1: Generate splits
-# Stage 2: Run all 5 between-map models in parallel (after splits)
+# Stage 2: Run all 5 between-map models plus Column Mean in parallel (after splits)
 # Stage 3: Measure losses (after all models complete)
 
 set -e
@@ -28,8 +28,11 @@ echo "  SingleAE job array: $J4"
 J5=$(sbatch --parsable --dependency=afterok:$SPLIT_JOB submit_nodouble_dual_ae.sh)
 echo "  DualAE job array: $J5"
 
+J6=$(sbatch --parsable --dependency=afterok:$SPLIT_JOB submit_nodouble_colmean.sh)
+echo "  Column Mean job array: $J6"
+
 echo "Stage 3: Submitting loss measurement (depend on all models)..."
-LOSS_JOB=$(sbatch --parsable --dependency=afterok:$J1:$J2:$J3:$J4:$J5 submit_nodouble_measure_losses.sh)
+LOSS_JOB=$(sbatch --parsable --dependency=afterok:$J1:$J2:$J3:$J4:$J5:$J6 submit_nodouble_measure_losses.sh)
 echo "  Loss measurement job: $LOSS_JOB"
 
 echo ""
@@ -40,4 +43,5 @@ echo "  MICE PMM: $J2 (40 tasks)"
 echo "  MICE RF:  $J3 (40 tasks)"
 echo "  SingleAE: $J4 (40 tasks)"
 echo "  DualAE:   $J5 (40 tasks)"
+echo "  Col Mean: $J6 (40 tasks)"
 echo "  Losses:   $LOSS_JOB (after all above)"

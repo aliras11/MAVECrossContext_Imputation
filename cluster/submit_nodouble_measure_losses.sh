@@ -6,6 +6,8 @@
 #SBATCH --partition=dept_cpu
 #SBATCH --output=logs/nodouble_losses_%j.out
 
+set -e
+
 eval "$(conda shell.bash hook)"
 conda activate struct
 
@@ -26,5 +28,8 @@ python $SCRIPTS/loss_measure_singleae_no_double_missing.py
 
 echo "=== DualAE ==="
 python $SCRIPTS/loss_measure_dualae_no_double_missing.py
+
+echo "=== Task-matched Column Mean B1 ==="
+python $SCRIPTS/loss_measure_colmean_no_double_missing.py
 
 echo "All loss measurements complete."

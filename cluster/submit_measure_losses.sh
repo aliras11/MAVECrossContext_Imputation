@@ -7,6 +7,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --partition=dept_cpu
 
+set -e
+
 eval "$(conda shell.bash hook)"
 conda activate struct
 
@@ -15,6 +17,7 @@ SCRIPTS=$ROOT/MAVE-Imputation-Pipeline/imputation
 
 python $SCRIPTS/singleae_loss_measure.py
 python $SCRIPTS/doubleae_loss_measure.py
+echo "=== Task-matched Column Mean W/B1/B0 ==="
 python $SCRIPTS/measure_loss_on_splits_colmean.py
 python $SCRIPTS/measure_loss_on_knn_imputer.py --sim_mode direct
 python $SCRIPTS/pca_loss_measure.py

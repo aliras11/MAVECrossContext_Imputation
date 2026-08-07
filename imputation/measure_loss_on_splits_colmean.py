@@ -1,97 +1,425 @@
-import pandas as pd
-import numpy as np
+"""Produce task-matched Column Mean losses for regular splits.
+
+Column Mean produces one target-only prediction per assay context.  This
+scorer reuses that prediction for the within-map task and for every ordered
+non-self source-to-target task, selecting evaluation cells from the target
+mask and source availability in the training split.
+"""
+
+from __future__ import annotations
+
+import argparse
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 import re
 
-from runtime_paths import FULL_DATA_CSV, LOSS_RESULTS_DIR, REGULAR_SPLITS_DIR
+import numpy as np
+import pandas as pd
+
+from runtime_paths import (
+    FULL_DATA_CSV,
+    LOSS_RESULTS_DIR,
+    REGULAR_SPLITS_DIR,
+    RUN_ROOT,
+)
 
 
+CONTEXTS = (
+    "av12",
+    "av25",
+    "av100",
+    "av200",
+    "wt12",
+    "wt25",
+    "wt100",
+    "wt200",
+)
+REGULAR_RATES = (10, 20, 40, 60, 80, 90)
+OUTPUT_COLUMNS = (
+    "dataset",
+    "model",
+    "rate",
+    "split",
+    "src",
+    "tgt",
+    "shift_type",
+    "loss_type",
+    "rmse",
+    "n_points",
+    "sse",
+    "prediction_file",
+    "train_file",
+    "mask_file",
+)
+LOGICAL_KEY = (
+    "dataset",
+    "model",
+    "rate",
+    "split",
+    "src",
+    "tgt",
+    "loss_type",
+)
+TRAIN_FILE_PATTERN = re.compile(r"^train_split_r(?P<rate>\d+)_s(?P<split>\d+)\.csv$")
+TASK_TO_LOSS_TYPE = {
+    "W": "within_map",
+    "B1": "regression_test",
+    "B0": "double_missing",
+}
 
 
-###measure losses on Column Mean outputs###
-full_data_df = pd.read_csv(FULL_DATA_CSV)
-base_dir = REGULAR_SPLITS_DIR
-
-def extract_r_s(name: str):
-    # Pull integers following 'r' and 's' anywhere in the filename
-    rm = re.search(r"r(\d+)", name, flags=re.IGNORECASE)
-    sm = re.search(r"s(\d+)", name, flags=re.IGNORECASE)
-    r = int(rm.group(1)) if rm else None
-    s = int(sm.group(1)) if sm else None
-    return r, s
-
-def rmse(y_true: pd.Series, y_pred: pd.Series) -> float:
-    pair = pd.concat([y_true, y_pred], axis=1).dropna()
-    if pair.empty:
-        return float("nan")
-    diff = pair.iloc[:, 0].to_numpy() - pair.iloc[:, 1].to_numpy()
-    return float(np.sqrt(np.mean(diff * diff)))
+def _validate_unique_hgvs(frame: pd.DataFrame, label: str) -> None:
+    if "hgvs_pro" not in frame.columns:
+        raise ValueError(f"{label} is missing hgvs_pro")
+    if frame["hgvs_pro"].isna().any():
+        raise ValueError(f"{label} contains null hgvs_pro values")
+    duplicates = int(frame["hgvs_pro"].duplicated(keep=False).sum())
+    if duplicates:
+        raise ValueError(
+            f"{label} contains {duplicates} rows with duplicate hgvs_pro values"
+        )
 
 
+def align_frames(
+    full_df: pd.DataFrame,
+    train_df: pd.DataFrame,
+    mask_df: pd.DataFrame,
+    prediction_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Align four complete split artifacts one-to-one by ``hgvs_pro``."""
+    frames = (
+        (full_df, "full data"),
+        (train_df, "train split"),
+        (mask_df, "mask"),
+        (prediction_df, "prediction"),
+    )
+    for frame, label in frames:
+        _validate_unique_hgvs(frame, label)
 
-all_results = []
-rates = [10,20,40,60,80,90]
+    reference_keys = set(full_df["hgvs_pro"])
+    for frame, label in frames[1:]:
+        candidate_keys = set(frame["hgvs_pro"])
+        missing = reference_keys - candidate_keys
+        unexpected = candidate_keys - reference_keys
+        if missing or unexpected:
+            raise ValueError(
+                f"{label} hgvs_pro keys do not match full data "
+                f"(missing={len(missing)}, unexpected={len(unexpected)})"
+            )
+
+    order = pd.Index(full_df["hgvs_pro"], name="hgvs_pro")
+    return tuple(
+        frame.set_index("hgvs_pro", drop=False).loc[order].reset_index(drop=True)
+        for frame, _label in frames
+    )
 
 
+def _numeric(frame: pd.DataFrame, column: str, label: str) -> pd.Series:
+    if column not in frame.columns:
+        raise ValueError(f"{label} is missing required column {column!r}")
+    return pd.to_numeric(frame[column], errors="coerce")
 
-for rate in rates:
-    print(f"\nTest fraction r: {rate}")
-    mean_impute_model_out = f"mean_imputed_{rate}" #open relevant test fraction folder for model outputs
-    mean_impute_model_out = base_dir / Path(mean_impute_model_out) #add the base directory path so that it can be found
-    masked_data_folder = base_dir / Path(f"test_frac_{rate}") #open the relevant training data for that test fraction
-    for split_file in masked_data_folder.iterdir():
 
-        if split_file.is_file() and split_file.name.startswith("train_split_"):
-            print(f"  Split file: {split_file.name}")
-            masked_data_split = pd.read_csv(split_file)
-            r , sp = extract_r_s(split_file.name)
-            print(f"    r,s extracted: {r}, {sp}")
-            for model_out_split in mean_impute_model_out.iterdir():
-                if model_out_split.is_dir() and model_out_split.name == f"split_{sp}":
-                    print(f"   Model output split found: {model_out_split.name}")
-                    for file in model_out_split.iterdir():
-                        if file.is_file() and file.suffix == ".csv":
-                            print(f"      File: {file.name}")
-                            model_output_df = pd.read_csv(file)
-                            numeric_cols = [
-                                c for c in model_output_df.select_dtypes(include=['number']).columns
-                                if c.endswith('score') or c.endswith('se')]
-                            merged_df = full_data_df.merge(
-                                model_output_df,
-                                on="hgvs_pro",
-                                suffixes=("_true", "_pred"),
-                            ).merge(
-                                masked_data_split[["hgvs_pro"]+numeric_cols],
-                                on="hgvs_pro",
-                            ) #dont need a suffix here since these arent overlapping columns, merged to ensure alignment
+def _finite(values: pd.Series) -> pd.Series:
+    return pd.Series(
+        np.isfinite(values.to_numpy(dtype=float, na_value=np.nan)),
+        index=values.index,
+    )
 
-                            for col in numeric_cols:
-                                true_col = f"{col}_true"
-                                pred_col = f"{col}_pred"
-                                mask_to_measure_only_test_points = merged_df[col].isna()
-                                loss = rmse(merged_df.loc[mask_to_measure_only_test_points,true_col], merged_df.loc[mask_to_measure_only_test_points,pred_col])
-                                # Per-bucket point counts — only cells where both truth and
-                                # prediction are non-NaN (matches what rmse() actually scored).
-                                elig = merged_df[[true_col, pred_col]].notna().all(axis=1)
-                                n_test = int((mask_to_measure_only_test_points & elig).sum())
-                                n_training = int((~mask_to_measure_only_test_points & elig).sum())
-                                result = {
-                                    "test_fraction": rate,
-                                    "split": sp,
-                                    "model_file": file.name,
-                                    "metric": "rmse",
-                                    "column": col,
-                                    "loss": loss,
-                                    "n_test": n_test,
-                                    "n_training": n_training,
-                                }
-                                all_results.append(result)
-                                print(f"        Column: {col}, RMSE: {loss:.4f}")
-                            
 
-if all_results:
-    LOSS_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    save_path = LOSS_RESULTS_DIR / "col_mean_imputed_results.csv"
-    combined_results = pd.DataFrame(all_results)
-    combined_results.to_csv(save_path, index=False)
-    print(f"Saved combined results with {len(combined_results)} rows")
+def _validate_target_mask(mask: pd.Series, *, target: str) -> None:
+    if mask.isna().any() or not mask.isin({0, 1}).all():
+        raise ValueError(f"mask column {target}_score must contain only 0 or 1")
+
+
+def _shift_type(source: str, target: str) -> str:
+    if source == target:
+        return "self"
+    source_family = "wt" if source.startswith("wt") else "av"
+    target_family = "wt" if target.startswith("wt") else "av"
+    return f"{source_family}→{target_family}"
+
+
+def _relative_to_run_root(path: Path, run_root: Path) -> str:
+    resolved_path = Path(path).resolve()
+    resolved_root = Path(run_root).resolve()
+    try:
+        return resolved_path.relative_to(resolved_root).as_posix()
+    except ValueError as error:
+        raise ValueError(
+            f"artifact path must be inside run root {resolved_root}: {resolved_path}"
+        ) from error
+
+
+def _score_row(
+    *,
+    full_df: pd.DataFrame,
+    train_df: pd.DataFrame,
+    mask_df: pd.DataFrame,
+    prediction_df: pd.DataFrame,
+    dataset: str,
+    rate: int,
+    split: int,
+    source: str,
+    target: str,
+    task: str,
+    prediction_file: str,
+    train_file: str,
+    mask_file: str,
+) -> dict[str, object]:
+    target_column = f"{target}_score"
+    truth = _numeric(full_df, target_column, "full data")
+    prediction = _numeric(prediction_df, target_column, "prediction")
+    target_mask = _numeric(mask_df, target_column, "mask")
+    _validate_target_mask(target_mask, target=target)
+
+    selected = target_mask.eq(1)
+    if task == "B1" or task == "B0":
+        source_train = _numeric(train_df, f"{source}_score", "train split")
+        source_available = _finite(source_train)
+        selected &= source_available if task == "B1" else ~source_available
+    elif task != "W":
+        raise ValueError(f"unsupported Column Mean task: {task}")
+
+    eligible = selected & _finite(truth) & _finite(prediction)
+    n_points = int(eligible.sum())
+    if n_points == 0:
+        raise ValueError(
+            "zero eligible points for "
+            f"{dataset} rate={rate} split={split} {source}->{target} "
+            f"{TASK_TO_LOSS_TYPE[task]}"
+        )
+
+    error = (
+        prediction.loc[eligible].to_numpy(dtype=float)
+        - truth.loc[eligible].to_numpy(dtype=float)
+    )
+    sse = float(np.dot(error, error))
+    rmse = float(np.sqrt(sse / n_points))
+    if not np.isfinite(sse) or not np.isfinite(rmse):
+        raise ValueError(
+            f"non-finite loss for {dataset} rate={rate} split={split} "
+            f"{source}->{target} {TASK_TO_LOSS_TYPE[task]}"
+        )
+
+    return {
+        "dataset": dataset,
+        "model": "col_mean",
+        "rate": int(rate),
+        "split": int(split),
+        "src": source,
+        "tgt": target,
+        "shift_type": _shift_type(source, target),
+        "loss_type": TASK_TO_LOSS_TYPE[task],
+        "rmse": rmse,
+        "n_points": n_points,
+        "sse": sse,
+        "prediction_file": prediction_file,
+        "train_file": train_file,
+        "mask_file": mask_file,
+    }
+
+
+def build_task_loss_rows(
+    full_df: pd.DataFrame,
+    train_df: pd.DataFrame,
+    mask_df: pd.DataFrame,
+    prediction_df: pd.DataFrame,
+    *,
+    dataset: str,
+    rate: int,
+    split: int,
+    prediction_path: Path,
+    train_path: Path,
+    mask_path: Path,
+    run_root: Path,
+    targets: Sequence[str],
+    include_within: bool,
+    include_b0: bool,
+) -> list[dict[str, object]]:
+    """Build task-matched rows for one wide Column Mean prediction file."""
+    full, train, mask, prediction = align_frames(
+        full_df, train_df, mask_df, prediction_df
+    )
+    paths = {
+        "prediction_file": _relative_to_run_root(prediction_path, run_root),
+        "train_file": _relative_to_run_root(train_path, run_root),
+        "mask_file": _relative_to_run_root(mask_path, run_root),
+    }
+    rows: list[dict[str, object]] = []
+    for target in targets:
+        if target not in CONTEXTS:
+            raise ValueError(f"unknown target context: {target}")
+        if include_within:
+            rows.append(
+                _score_row(
+                    full_df=full,
+                    train_df=train,
+                    mask_df=mask,
+                    prediction_df=prediction,
+                    dataset=dataset,
+                    rate=rate,
+                    split=split,
+                    source=target,
+                    target=target,
+                    task="W",
+                    **paths,
+                )
+            )
+        for source in CONTEXTS:
+            if source == target:
+                continue
+            rows.append(
+                _score_row(
+                    full_df=full,
+                    train_df=train,
+                    mask_df=mask,
+                    prediction_df=prediction,
+                    dataset=dataset,
+                    rate=rate,
+                    split=split,
+                    source=source,
+                    target=target,
+                    task="B1",
+                    **paths,
+                )
+            )
+            if include_b0:
+                rows.append(
+                    _score_row(
+                        full_df=full,
+                        train_df=train,
+                        mask_df=mask,
+                        prediction_df=prediction,
+                        dataset=dataset,
+                        rate=rate,
+                        split=split,
+                        source=source,
+                        target=target,
+                        task="B0",
+                        **paths,
+                    )
+                )
+    return rows
+
+
+def iter_split_inputs(
+    *,
+    split_root: Path,
+    prediction_root: Path,
+    rate: int,
+) -> Iterable[tuple[int, Path, Path, Path]]:
+    input_dir = split_root / f"test_frac_{rate}"
+    if not input_dir.is_dir():
+        raise FileNotFoundError(f"split directory not found: {input_dir}")
+    train_paths = sorted(input_dir.glob(f"train_split_r{rate}_s*.csv"))
+    if not train_paths:
+        raise FileNotFoundError(f"no train splits found in {input_dir}")
+    seen_splits: set[int] = set()
+    for train_path in train_paths:
+        match = TRAIN_FILE_PATTERN.fullmatch(train_path.name)
+        if match is None or int(match.group("rate")) != int(rate):
+            raise ValueError(f"unexpected train filename: {train_path}")
+        split = int(match.group("split"))
+        if split in seen_splits:
+            raise ValueError(f"duplicate train split for rate={rate}, split={split}")
+        seen_splits.add(split)
+        mask_path = train_path.with_name(f"mask_r{rate}_s{split}.csv")
+        prediction_path = (
+            prediction_root
+            / f"mean_imputed_{rate}"
+            / f"split_{split}"
+            / f"mean_imputed_split{split}.csv"
+        )
+        for path, label in ((mask_path, "mask"), (prediction_path, "prediction")):
+            if not path.is_file():
+                raise FileNotFoundError(f"{label} file not found: {path}")
+        yield split, train_path, mask_path, prediction_path
+
+
+def validate_output(rows: list[dict[str, object]]) -> pd.DataFrame:
+    if not rows:
+        raise ValueError("no Column Mean task-loss rows were generated")
+    result = pd.DataFrame(rows, columns=OUTPUT_COLUMNS)
+    duplicated = result.duplicated(list(LOGICAL_KEY), keep=False)
+    if duplicated.any():
+        example = result.loc[duplicated, list(LOGICAL_KEY)].iloc[0].to_dict()
+        raise ValueError(f"duplicate logical Column Mean loss key: {example}")
+    if (result["n_points"] <= 0).any():
+        raise ValueError("Column Mean task losses contain a zero-point row")
+    for column in ("rmse", "sse"):
+        values = result[column].to_numpy(dtype=float)
+        if not np.isfinite(values).all() or (values < 0).any():
+            raise ValueError(f"Column Mean task losses contain invalid {column}")
+    return result
+
+
+def produce_regular_task_losses(
+    *,
+    full_data_path: Path,
+    base_dir: Path,
+    run_root: Path,
+    rates: Sequence[int],
+) -> pd.DataFrame:
+    full_df = pd.read_csv(full_data_path)
+    rows: list[dict[str, object]] = []
+    for rate in rates:
+        for split, train_path, mask_path, prediction_path in iter_split_inputs(
+            split_root=base_dir,
+            prediction_root=base_dir,
+            rate=int(rate),
+        ):
+            rows.extend(
+                build_task_loss_rows(
+                    full_df,
+                    pd.read_csv(train_path),
+                    pd.read_csv(mask_path),
+                    pd.read_csv(prediction_path),
+                    dataset="regular",
+                    rate=int(rate),
+                    split=split,
+                    prediction_path=prediction_path,
+                    train_path=train_path,
+                    mask_path=mask_path,
+                    run_root=run_root,
+                    targets=CONTEXTS,
+                    include_within=True,
+                    include_b0=True,
+                )
+            )
+    return validate_output(rows)
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Produce W, B1, and B0 task-matched Column Mean losses."
+    )
+    parser.add_argument("--full-data", type=Path, default=FULL_DATA_CSV)
+    parser.add_argument("--base-dir", type=Path, default=REGULAR_SPLITS_DIR)
+    parser.add_argument("--run-root", type=Path, default=RUN_ROOT)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=LOSS_RESULTS_DIR / "column_mean_task_losses_regular.csv",
+    )
+    parser.add_argument(
+        "--rates", nargs="+", type=int, default=list(REGULAR_RATES)
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = _parse_args()
+    result = produce_regular_task_losses(
+        full_data_path=args.full_data,
+        base_dir=args.base_dir,
+        run_root=args.run_root,
+        rates=args.rates,
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    result.to_csv(args.output, index=False)
+    print(f"Saved {len(result)} task-matched Column Mean rows to {args.output}")
+
+
+if __name__ == "__main__":
+    main()
