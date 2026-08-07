@@ -35,6 +35,8 @@ CONTEXTS = (
     "wt200",
 )
 REGULAR_RATES = (10, 20, 40, 60, 80, 90)
+DEFAULT_EXPECTED_SPLITS = 50
+REGULAR_ROWS_PER_SPLIT = len(CONTEXTS) + 2 * len(CONTEXTS) * (len(CONTEXTS) - 1)
 OUTPUT_COLUMNS = (
     "dataset",
     "model",
@@ -308,22 +310,39 @@ def iter_split_inputs(
     split_root: Path,
     prediction_root: Path,
     rate: int,
+    expected_splits: int,
+    scope: str,
 ) -> Iterable[tuple[int, Path, Path, Path]]:
+    if expected_splits < 1:
+        raise ValueError("expected_splits must be a positive integer")
     input_dir = split_root / f"test_frac_{rate}"
     if not input_dir.is_dir():
         raise FileNotFoundError(f"split directory not found: {input_dir}")
     train_paths = sorted(input_dir.glob(f"train_split_r{rate}_s*.csv"))
     if not train_paths:
         raise FileNotFoundError(f"no train splits found in {input_dir}")
-    seen_splits: set[int] = set()
+    split_paths: dict[int, Path] = {}
     for train_path in train_paths:
         match = TRAIN_FILE_PATTERN.fullmatch(train_path.name)
         if match is None or int(match.group("rate")) != int(rate):
             raise ValueError(f"unexpected train filename: {train_path}")
         split = int(match.group("split"))
-        if split in seen_splits:
+        if split in split_paths:
             raise ValueError(f"duplicate train split for rate={rate}, split={split}")
-        seen_splits.add(split)
+        split_paths[split] = train_path
+
+    expected_ids = set(range(1, expected_splits + 1))
+    observed_ids = set(split_paths)
+    missing = sorted(expected_ids - observed_ids)
+    unexpected = sorted(observed_ids - expected_ids)
+    if missing or unexpected:
+        raise ValueError(
+            f"{scope} split IDs must equal 1..{expected_splits}; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+
+    for split in sorted(split_paths):
+        train_path = split_paths[split]
         mask_path = train_path.with_name(f"mask_r{rate}_s{split}.csv")
         prediction_path = (
             prediction_root
@@ -354,12 +373,26 @@ def validate_output(rows: list[dict[str, object]]) -> pd.DataFrame:
     return result
 
 
+def validate_expected_row_count(
+    result: pd.DataFrame,
+    *,
+    expected_rows: int,
+    scope: str,
+) -> pd.DataFrame:
+    if len(result) != expected_rows:
+        raise ValueError(
+            f"{scope} expected {expected_rows} task-loss rows, found {len(result)}"
+        )
+    return result
+
+
 def produce_regular_task_losses(
     *,
     full_data_path: Path,
     base_dir: Path,
     run_root: Path,
     rates: Sequence[int],
+    expected_splits: int = DEFAULT_EXPECTED_SPLITS,
 ) -> pd.DataFrame:
     full_df = pd.read_csv(full_data_path)
     rows: list[dict[str, object]] = []
@@ -368,6 +401,8 @@ def produce_regular_task_losses(
             split_root=base_dir,
             prediction_root=base_dir,
             rate=int(rate),
+            expected_splits=expected_splits,
+            scope=f"regular rate={int(rate)}",
         ):
             rows.extend(
                 build_task_loss_rows(
@@ -387,7 +422,12 @@ def produce_regular_task_losses(
                     include_b0=True,
                 )
             )
-    return validate_output(rows)
+    result = validate_output(rows)
+    return validate_expected_row_count(
+        result,
+        expected_rows=len(rates) * expected_splits * REGULAR_ROWS_PER_SPLIT,
+        scope="regular Column Mean",
+    )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -405,6 +445,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rates", nargs="+", type=int, default=list(REGULAR_RATES)
     )
+    parser.add_argument(
+        "--expected-splits",
+        type=int,
+        default=DEFAULT_EXPECTED_SPLITS,
+        help="Require exact split IDs 1..N for every requested rate (default: 50).",
+    )
     return parser.parse_args()
 
 
@@ -415,6 +461,7 @@ def main() -> None:
         base_dir=args.base_dir,
         run_root=args.run_root,
         rates=args.rates,
+        expected_splits=args.expected_splits,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(args.output, index=False)
