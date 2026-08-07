@@ -46,6 +46,8 @@ def _require_complete_headline_families(
     """Fail closed: publication MWU families must never silently shrink."""
     expected_models = set(models)
     expected_split_ids = set(range(1, expected_splits + 1))
+    if set(pooled["rate"]) != set(rates):
+        raise ValueError(f"{label} has unexpected or missing publication rates")
     for rate in rates:
         selected = pooled.loc[pooled["rate"] == rate]
         if set(selected["model"]) != expected_models:
@@ -53,6 +55,24 @@ def _require_complete_headline_families(
         for model in expected_models:
             if set(selected.loc[selected["model"] == model, "split"]) != expected_split_ids:
                 raise ValueError(f"{label} rate={rate} model={model} has incomplete split coverage")
+
+
+def _require_complete_context_grid(
+    raw: pd.DataFrame, *, models: tuple[str, ...], rates: tuple[int, ...], expected_splits: int, minimum_completeness: float, within: bool, label: str
+) -> None:
+    contexts = ("av12", "av25", "av100", "av200", "wt12", "wt25", "wt100", "wt200")
+    expected_contexts = {(item, item) for item in contexts} if within else {(src, tgt) for src in contexts for tgt in contexts if src != tgt}
+    if set(raw["rate"]) != set(rates):
+        raise ValueError(f"{label} has unexpected or missing publication rates")
+    for rate in rates:
+        for model in models:
+            selected = raw.loc[(raw["rate"] == rate) & (raw["model"] == model)]
+            observed_contexts = set(selected[["src", "tgt"]].itertuples(index=False, name=None))
+            if observed_contexts != expected_contexts:
+                raise ValueError(f"{label} rate={rate} model={model} has incomplete context grid")
+            counts = selected.groupby(["src", "tgt"])["split"].nunique()
+            if (counts < expected_splits * minimum_completeness).any():
+                raise ValueError(f"{label} rate={rate} model={model} has incomplete context splits")
 
 
 def _validate_output_location(
@@ -176,6 +196,8 @@ def build_statistics_tables(
         loss_type="regression_test",
         models=B1_MODELS,
     )
+    if set(no_double_raw["rate"]) != set(NODOUBLE_RATES):
+        raise ValueError("no-double has unexpected or missing publication rates")
     filtered_no_double_raw, no_double_audit = filter_incomplete_model_rates(
         no_double_raw,
         rates=NODOUBLE_RATES,
@@ -193,8 +215,13 @@ def build_statistics_tables(
     _require_complete_headline_families(w_pooled, models=W_MODELS, rates=(10, 20, 40, 60, 80, 90), expected_splits=expected_splits, label="W")
     nodouble_full = B1_MODELS
     nodouble_999 = ("single_ae", "dual_ae", "mice", "mice_rf", "basic_linear", "oneparam_linear", "col_mean")
-    _require_complete_headline_families(no_double_pooled, models=nodouble_full, rates=(10, 40, 80, 99), expected_splits=expected_splits, label="no-double")
-    _require_complete_headline_families(no_double_pooled, models=nodouble_999, rates=(999,), expected_splits=expected_splits, label="no-double")
+    _require_complete_headline_families(no_double_pooled.loc[no_double_pooled["rate"].isin((10, 40, 80, 99))], models=nodouble_full, rates=(10, 40, 80, 99), expected_splits=expected_splits, label="no-double")
+    _require_complete_headline_families(no_double_pooled.loc[no_double_pooled["rate"] == 999], models=nodouble_999, rates=(999,), expected_splits=expected_splits, label="no-double")
+    _require_complete_context_grid(w_raw, models=W_MODELS, rates=(10, 20, 40, 60, 80, 90), expected_splits=expected_splits, minimum_completeness=minimum_completeness, within=True, label="W")
+    _require_complete_context_grid(b1_raw, models=B1_MODELS, rates=(10, 20, 40, 60, 80, 90), expected_splits=expected_splits, minimum_completeness=minimum_completeness, within=False, label="B1")
+    _require_complete_context_grid(b0_raw, models=B0_MODELS, rates=(10, 20, 40, 60, 80, 90), expected_splits=expected_splits, minimum_completeness=minimum_completeness, within=False, label="B0")
+    _require_complete_context_grid(filtered_no_double_raw.loc[filtered_no_double_raw["rate"].isin((10, 40, 80, 99))], models=nodouble_full, rates=(10, 40, 80, 99), expected_splits=expected_splits, minimum_completeness=minimum_completeness, within=False, label="no-double")
+    _require_complete_context_grid(filtered_no_double_raw.loc[filtered_no_double_raw["rate"] == 999], models=nodouble_999, rates=(999,), expected_splits=expected_splits, minimum_completeness=minimum_completeness, within=False, label="no-double")
 
     tables = {
         "nodouble_model_rate_completeness.csv": no_double_audit,

@@ -3,9 +3,9 @@
 A 2x3 small-multiples grid (one panel per saturation level) showing the
 coverage-accuracy tradeoff for between-map imputation models. LMMs
 structurally cannot predict B_0 cells, so they "abstain" on the
-B_0 fraction of the test set; AE/MICE predict every between-map cell.
+B_0 fraction of the test set; AE, MICE, and Column Mean predict every between-map cell.
 
-Headline: LMMs aren't lower curves than AE/MICE — they're shorter ones
+Headline: LMMs aren't lower curves than full-coverage methods — they're shorter ones
 (truncated coverage). Reference: Geifman & El-Yaniv (2017),
 Traub et al. (NeurIPS 2024).
 """
@@ -31,8 +31,8 @@ def main(
         'basic_linear', 'oneparam_linear', 'full_interaction_linear',
         'full_interaction_mixed', 'mixed_random',
     }
-    AEMICE_MODELS = {'single_ae', 'dual_ae', 'mice', 'mice_rf'}
-    ALL_MODELS = LMM_MODELS | AEMICE_MODELS | {'col_mean'}
+    FULL_COVERAGE_MODELS = {'single_ae', 'dual_ae', 'mice', 'mice_rf', 'col_mean'}
+    ALL_MODELS = LMM_MODELS | FULL_COVERAGE_MODELS
 
     # --- Load and filter ---
     df = fh.load_main_results(results_dir)
