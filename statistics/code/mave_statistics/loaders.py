@@ -208,8 +208,11 @@ def _parse_task_column_losses(
     if list(frame.columns) != required:
         raise ValueError("task-matched Column Mean losses must have exactly the Task 1 columns in order")
     for column in ("prediction_file", "train_file", "mask_file"):
+        if frame[column].isna().any():
+            raise ValueError("task-matched Column Mean provenance paths must be nonblank run-root-relative paths")
         paths = frame[column].astype(str)
-        if paths.str.strip().eq("").any() or paths.eq(".").any() or paths.map(lambda value: Path(value).is_absolute() or ".." in Path(value).parts).any():
+        stripped = paths.str.strip()
+        if (paths != stripped).any() or stripped.eq("").any() or stripped.eq(".").any() or stripped.map(lambda value: Path(value).is_absolute() or ".." in Path(value).parts).any():
             raise ValueError("task-matched Column Mean provenance paths must be nonblank run-root-relative paths")
     if set(frame["dataset"].astype(str)) != {dataset}:
         raise ValueError(f"task-matched Column Mean losses must use dataset={dataset!r}")
