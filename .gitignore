@@ -39,6 +39,8 @@ logs/
 slurm-*.out
 
 # Temporary and staging work
+.worktrees/
+.superpowers/
 tmp/
 temp/
 staging/
