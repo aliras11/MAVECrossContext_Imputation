@@ -196,9 +196,13 @@ def _parse_column_loss(
     return rows
 
 
-def _parse_task_column_losses(path: Path, dataset: str) -> list[dict[str, Any]]:
+def _parse_task_column_losses(
+    path: Path, dataset: str, *, expected_splits: int = 50
+) -> list[dict[str, Any]]:
     frame = pd.read_csv(path)
-    required = set(NORMALIZED_COLUMNS) | {"sse"}
+    required = set(NORMALIZED_COLUMNS) | {
+        "sse", "prediction_file", "train_file", "mask_file"
+    }
     missing = sorted(required - set(frame.columns))
     if missing:
         raise ValueError(f"task-matched Column Mean losses missing columns: {missing}")
@@ -206,6 +210,43 @@ def _parse_task_column_losses(path: Path, dataset: str) -> list[dict[str, Any]]:
         raise ValueError(f"task-matched Column Mean losses must use dataset={dataset!r}")
     if set(frame["model"].astype(str)) != {"col_mean"}:
         raise ValueError("task-matched Column Mean losses must use model='col_mean'")
+    numeric = frame[["rmse", "n_points", "sse"]].apply(pd.to_numeric, errors="coerce")
+    if not np.isfinite(numeric.to_numpy()).all() or (numeric["rmse"] < 0).any() or (numeric["sse"] < 0).any():
+        raise ValueError("task-matched Column Mean losses require finite non-negative RMSE and SSE")
+    if (numeric["n_points"] <= 0).any() or not np.equal(numeric["n_points"], np.floor(numeric["n_points"])).all():
+        raise ValueError("task-matched Column Mean losses require positive integer n_points")
+    if not np.isclose(numeric["sse"], numeric["n_points"] * numeric["rmse"] ** 2, rtol=1e-6, atol=1e-10).all():
+        raise ValueError("task-matched Column Mean losses require sse == n_points * rmse^2")
+    allowed = {"within_map", "regression_test", "double_missing"}
+    if not set(frame["loss_type"]).issubset(allowed):
+        raise ValueError("task-matched Column Mean losses have unknown loss_type")
+    self_rows = frame["src"].eq(frame["tgt"])
+    if not frame.loc[self_rows, "loss_type"].eq("within_map").all() or not frame.loc[~self_rows, "loss_type"].isin({"regression_test", "double_missing"}).all():
+        raise ValueError("task-matched Column Mean loss_type/context mismatch")
+    if frame.duplicated(LOGICAL_KEY).any():
+        raise ValueError("duplicate logical task-matched Column Mean loss rows")
+    contexts = ("av12", "av25", "av100", "av200", "wt12", "wt25", "wt100", "wt200")
+    rates = (10, 20, 40, 60, 80, 90) if dataset == "regular" else (10, 40, 80, 99, 999)
+    expected_rows = len(rates) * expected_splits * (120 if dataset == "regular" else 56)
+    if len(frame) != expected_rows or set(frame["rate"]) != set(rates) or set(frame["split"]) != set(range(1, expected_splits + 1)):
+        raise ValueError("incomplete task-matched Column Mean loss grid")
+    expected = set()
+    for rate in rates:
+        for split in range(1, expected_splits + 1):
+            if dataset == "regular":
+                expected.update((rate, split, context, context, "within_map") for context in contexts)
+            for source in contexts:
+                for target in contexts:
+                    if source != target:
+                        expected.add((rate, split, source, target, "regression_test"))
+                        if dataset == "regular":
+                            expected.add((rate, split, source, target, "double_missing"))
+    observed = set(frame[["rate", "split", "src", "tgt", "loss_type"]].itertuples(index=False, name=None))
+    if observed != expected:
+        raise ValueError("task-matched Column Mean loss grid has missing or unexpected logical keys")
+    expected_shift = frame.apply(lambda row: _shift_type(str(row["src"]), str(row["tgt"])), axis=1)
+    if not frame["shift_type"].eq(expected_shift).all():
+        raise ValueError("task-matched Column Mean losses have inconsistent shift_type")
     return frame.loc[:, NORMALIZED_COLUMNS].to_dict("records")
 
 
@@ -230,7 +271,7 @@ def _normalized_frame(
     return result
 
 
-def load_main_results(results_dir: Path) -> pd.DataFrame:
+def load_main_results(results_dir: Path, *, expected_splits: int = 50) -> pd.DataFrame:
     """Load all required regular result sources into normalized rows."""
     paths = _require_files(results_dir, REGULAR_RESULT_FILES)
     rows: list[dict[str, Any]] = []
@@ -259,13 +300,13 @@ def load_main_results(results_dir: Path) -> pd.DataFrame:
         "knn", "_score_imputed",
     ))
     rows.extend(_parse_task_column_losses(
-        paths["column_mean_task_losses_regular.csv"], "regular"
+        paths["column_mean_task_losses_regular.csv"], "regular", expected_splits=expected_splits
     ))
     rows.extend(_parse_pca(paths["pca_rmse_results_all.csv"]))
     return _normalized_frame(rows, "regular")
 
 
-def load_nodouble_results(results_dir: Path) -> pd.DataFrame:
+def load_nodouble_results(results_dir: Path, *, expected_splits: int = 50) -> pd.DataFrame:
     """Load all required no-double sources into regression-test rows."""
     paths = _require_files(results_dir, NODOUBLE_RESULT_FILES)
     rows: list[dict[str, Any]] = []
@@ -290,6 +331,6 @@ def load_nodouble_results(results_dir: Path) -> pd.DataFrame:
         include_double=False,
     ))
     rows.extend(_parse_task_column_losses(
-        paths["column_mean_task_losses_no_double.csv"], "no_double"
+        paths["column_mean_task_losses_no_double.csv"], "no_double", expected_splits=expected_splits
     ))
     return _normalized_frame(rows, "no_double")

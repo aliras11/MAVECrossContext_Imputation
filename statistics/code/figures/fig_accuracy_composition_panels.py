@@ -70,9 +70,9 @@ def main(
     B1_MODELS_DISPLAY_ORDER = [
         'single_ae', 'dual_ae', 'mice', 'mice_rf',
         'basic_linear', 'oneparam_linear', 'full_interaction_linear',
-        'mixed_random', 'full_interaction_mixed',
+        'mixed_random', 'full_interaction_mixed', 'col_mean',
     ]
-    B0_MODELS_DISPLAY_ORDER = ['single_ae', 'dual_ae', 'mice', 'mice_rf']
+    B0_MODELS_DISPLAY_ORDER = ['single_ae', 'dual_ae', 'mice', 'mice_rf', 'col_mean']
 
     # --- Bar colors (off-palette but visually compatible) ---
     B1_BAR_COLOR = '#88AAEE'

@@ -172,93 +172,6 @@ def headline_pairwise_mwu(
     return result[HEADLINE_COLUMNS]
 
 
-def baseline_mwu(
-    model_pooled: pd.DataFrame,
-    baseline_pooled: pd.DataFrame,
-    *,
-    dataset: str,
-    loss_type: str,
-    rate: int,
-    baseline_model: str = "col_mean",
-) -> pd.DataFrame:
-    """Compare selected models with regular within-map Column Mean splits."""
-    selected = _filtered(
-        model_pooled, dataset=dataset, loss_type=loss_type, rate=rate
-    )
-    selected = selected.loc[selected["model"] != baseline_model].copy()
-    reference = _filtered(
-        baseline_pooled,
-        dataset="regular",
-        loss_type="within_map",
-        rate=rate,
-    )
-    reference = reference.loc[
-        reference["model"] == baseline_model
-    ].copy()
-    _reject_duplicate_model_splits(selected)
-    _reject_duplicate_model_splits(reference)
-
-    baseline_values = _rmse_array(reference, baseline_model)
-    if len(baseline_values) == 0:
-        raise ValueError(
-            "baseline pooled data has no regular within_map reference rows"
-        )
-
-    models = sorted(selected["model"].unique())
-    family_size = len(models)
-    correction_family = (
-        f"{dataset}:{loss_type}:rate={rate}:models_vs_{baseline_model}"
-    )
-    baseline_mean = float(np.mean(baseline_values))
-    baseline_median = float(np.median(baseline_values))
-    rows = []
-    for model in models:
-        values = _rmse_array(selected, model)
-        test = mannwhitneyu(
-            values, baseline_values, alternative="two-sided"
-        )
-        model_mean = float(np.mean(values))
-        model_median = float(np.median(values))
-        mean_diff = model_mean - baseline_mean
-        median_diff = model_median - baseline_median
-        pct_improvement = (
-            100.0 * (baseline_median - model_median) / baseline_median
-        )
-        rows.append({
-            "dataset": dataset,
-            "loss_type": loss_type,
-            "rate": rate,
-            "model": model,
-            "method": MODEL_DISPLAY_NAMES.get(model, model),
-            "baseline_model": baseline_model,
-            "baseline_method": MODEL_DISPLAY_NAMES.get(
-                baseline_model, baseline_model
-            ),
-            "n_splits_model": len(values),
-            "n_splits_baseline": len(baseline_values),
-            "mean_rmse_model": model_mean,
-            "mean_rmse_baseline": baseline_mean,
-            "mean_diff_model_minus_baseline": mean_diff,
-            "median_rmse_model": model_median,
-            "median_rmse_baseline": baseline_median,
-            "median_diff_model_minus_baseline": median_diff,
-            "pct_improvement": pct_improvement,
-            "U": float(test.statistic),
-            "p_raw": float(test.pvalue),
-            "better_than_baseline": median_diff < 0,
-            "analysis_unit": ANALYSIS_UNIT,
-            "correction_method": CORRECTION_METHOD,
-            "correction_family": correction_family,
-            "family_size": family_size,
-        })
-
-    if not rows:
-        return pd.DataFrame(columns=BASELINE_COLUMNS)
-    result = pd.DataFrame(rows)
-    _finish_pvalues(result, family_size)
-    return result[BASELINE_COLUMNS]
-
-
 def baseline_view_from_headline(
     pairwise: pd.DataFrame, *, baseline_model: str = "col_mean"
 ) -> pd.DataFrame:
@@ -285,10 +198,11 @@ def baseline_view_from_headline(
             "mean_diff_model_minus_baseline": mean_model - mean_baseline,
             "median_rmse_model": median_model, "median_rmse_baseline": median_baseline,
             "median_diff_model_minus_baseline": median_model - median_baseline,
-            "pct_improvement": 100 * (median_baseline - median_model) / median_baseline,
-            "U": row.U, "p_raw": row.p_raw, "p_bonferroni": row.p_bonferroni,
+            "pct_improvement": 100 * (mean_baseline - mean_model) / mean_baseline,
+            "U": row.U if model_is_a else row.n_splits_a * row.n_splits_b - row.U,
+            "p_raw": row.p_raw, "p_bonferroni": row.p_bonferroni,
             "significant_0_05": row.significant_0_05,
-            "better_than_baseline": median_model < median_baseline,
+            "better_than_baseline": mean_model < mean_baseline,
             "analysis_unit": row.analysis_unit, "correction_method": row.correction_method,
             "correction_family": row.correction_family, "family_size": row.family_size,
         })

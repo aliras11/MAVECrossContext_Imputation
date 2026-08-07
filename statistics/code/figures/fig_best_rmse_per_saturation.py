@@ -1,8 +1,8 @@
 """fig8: Best Achievable RMSE per Saturation
 
 Three series on one panel:
-  * Best B_1            — per-rate min over the 9 between-map models of B_1 RMSE
-  * Best B_0            — per-rate min over the 4 B_0-capable models of B_0 RMSE
+  * Best B_1            — per-rate min over all task-matched B_1 models
+  * Best B_0            — per-rate min over all task-matched B_0 models
   * Task-routed best    — per-rate hybrid pooling best_B1 + best_B0 weighted by
                           n_B1 and n_B0 (per-task oracle lower bound)
 

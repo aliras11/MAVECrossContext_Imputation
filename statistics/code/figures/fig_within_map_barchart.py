@@ -81,7 +81,7 @@ def main(
             pairwise,
             rate=rate,
             best_model=best_model,
-            displayed_models=set(plot_models) | {"col_mean"},
+            displayed_models={plot_models[i] for i in finite} | {"col_mean"},
         ):
             if best_model == "col_mean":
                 bar_x, marker_y = x[j], cm_means[j] + 0.006

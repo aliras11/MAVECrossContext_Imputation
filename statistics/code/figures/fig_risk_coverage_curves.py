@@ -32,7 +32,7 @@ def main(
         'full_interaction_mixed', 'mixed_random',
     }
     AEMICE_MODELS = {'single_ae', 'dual_ae', 'mice', 'mice_rf'}
-    ALL_MODELS = LMM_MODELS | AEMICE_MODELS
+    ALL_MODELS = LMM_MODELS | AEMICE_MODELS | {'col_mean'}
 
     # --- Load and filter ---
     df = fh.load_main_results(results_dir)

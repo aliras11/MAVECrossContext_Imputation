@@ -44,6 +44,7 @@ def main(
         'dual_ae',
         'mice',
         'mice_rf',
+        'col_mean',
     ]
     LMM_MODELS = {
         'basic_linear', 'oneparam_linear',
@@ -60,8 +61,8 @@ def main(
         table = summary.pivot(index='model', columns='rate', values='weighted_rmse')
         return table
 
-    b1_table = task_rmse_table('regression_test')   # all 9 models present
-    b0_table = task_rmse_table('double_missing')    # only AE/MICE present
+    b1_table = task_rmse_table('regression_test')   # all 10 models present
+    b0_table = task_rmse_table('double_missing')    # AE/MICE plus Column Mean
 
     # Column ordering: rates 10, 20, 40, 60, 80, 90 left-to-right means saturations
     # 90% -> 10% (descending saturation, easy regime on left, extreme sparsity on right).
@@ -70,7 +71,7 @@ def main(
     B0_COLS = [('double_missing', r) for r in SAT_RATES]
     ALL_COLS = B1_COLS + B0_COLS  # 12 columns
 
-    # Build the 9 x 12 RMSE matrix (NaN for LMM x B_0).
+    # Build the all-method x 12 RMSE matrix (NaN for LMM x B_0).
     rmse_matrix = np.full((len(MODELS), len(ALL_COLS)), np.nan)
     for i, model in enumerate(MODELS):
         for j, (loss_type, rate) in enumerate(ALL_COLS):

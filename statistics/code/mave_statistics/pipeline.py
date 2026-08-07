@@ -78,25 +78,6 @@ def _headline_tables(
     ], ignore_index=True)
 
 
-def _baseline_tables(
-    pooled: pd.DataFrame,
-    baseline_pooled: pd.DataFrame,
-    *,
-    dataset: str,
-    loss_type: str,
-) -> pd.DataFrame:
-    return pd.concat([
-        baseline_mwu(
-            pooled,
-            baseline_pooled,
-            dataset=dataset,
-            loss_type=loss_type,
-            rate=rate,
-        )
-        for rate in _rates(pooled)
-    ], ignore_index=True)
-
-
 def _context_tables(
     raw: pd.DataFrame,
     *,
@@ -274,8 +255,8 @@ def generate_statistics(
         output_dir,
     )
     tables = build_statistics_tables(
-        load_main_results(main_results_dir),
-        load_nodouble_results(nodouble_results_dir),
+        load_main_results(main_results_dir, expected_splits=expected_splits),
+        load_nodouble_results(nodouble_results_dir, expected_splits=expected_splits),
         expected_splits=expected_splits,
         minimum_completeness=minimum_completeness,
     )

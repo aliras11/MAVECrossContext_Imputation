@@ -74,12 +74,12 @@ def main(
                             fontweight='bold', color=star_color)
 
         fig.suptitle(
-            f'Median RMSE Relative to Column Mean Baseline ({loss_label})',
+            f'Mean RMSE Relative to Column Mean Baseline ({loss_label})',
             fontsize=20,
             fontweight='bold',
         )
         fig.supxlabel(
-            'Reduction in median RMSE relative to column-mean baseline (%)',
+            'Reduction in mean RMSE relative to column-mean baseline (%)',
             fontsize=15,
             fontweight='bold',
             y=0.015,
