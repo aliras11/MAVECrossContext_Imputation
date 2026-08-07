@@ -117,7 +117,7 @@ def main(
     b0_ax.text(
         0.5, -0.18,
         'Linear and mixed-effects models cannot predict B$_0$ cells '
-        '(no source value to regress on); only AE and MICE families shown.',
+        '(no source value to regress on); AE, MICE, and Column Mean shown.',
         transform=b0_ax.transAxes,
         ha='center', va='top', fontsize=10, style='italic', color='#444444',
     )

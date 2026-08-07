@@ -5,7 +5,7 @@ visualize the within-column RMSE rank for each model. Headline claim: there is
 a best method per regime; which one depends predictably on saturation and task.
 MICE RF is the all-rounder; Basic Linear shines at extreme sparsity.
 
-Layout: a 9-row x 12-column heatmap (5 LMM + 4 AE/MICE rows; B_1 saturations
+Layout: a 10-row x 12-column heatmap (5 LMM + 4 AE/MICE + Column Mean rows; B_1 saturations
 left block, B_0 saturations right block, both ordered 90% -> 10%) with a
 winner-strip beneath highlighting the best method per regime.
 """
@@ -132,7 +132,7 @@ def main(
     cmap = plt.get_cmap('RdYlGn_r')
     n_rows, n_cols = rank_matrix.shape
 
-    # Normalize ranks to [0, 1] using max possible rank (number of models = 9).
+    # Normalize ranks to [0, 1] using the number of models in each task.
     # Empty (NaN) cells are masked.
     masked_ranks = np.ma.masked_invalid(rank_matrix)
     im = ax_main.imshow(

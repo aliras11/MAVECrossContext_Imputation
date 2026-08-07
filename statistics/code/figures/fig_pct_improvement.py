@@ -1,4 +1,4 @@
-"""Median RMSE differences from Column Mean — one 2x3 grid per loss type."""
+"""Mean RMSE differences from Column Mean — one 2x3 grid per loss type."""
 from pathlib import Path
 from figures import figure_helpers as fh
 import matplotlib.pyplot as plt
