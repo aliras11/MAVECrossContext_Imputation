@@ -119,7 +119,10 @@ def align_frames(
 def _numeric(frame: pd.DataFrame, column: str, label: str) -> pd.Series:
     if column not in frame.columns:
         raise ValueError(f"{label} is missing required column {column!r}")
-    return pd.to_numeric(frame[column], errors="coerce")
+    converted = pd.to_numeric(frame[column], errors="coerce")
+    if (frame[column].notna() & converted.isna()).any():
+        raise ValueError(f"{label} column {column!r} contains nonnumeric nonmissing values")
+    return converted
 
 
 def _finite(values: pd.Series) -> pd.Series:
@@ -132,6 +135,57 @@ def _finite(values: pd.Series) -> pd.Series:
 def _validate_target_mask(mask: pd.Series, *, target: str) -> None:
     if mask.isna().any() or not mask.isin({0, 1}).all():
         raise ValueError(f"mask column {target}_score must contain only 0 or 1")
+
+
+def _same_including_missing(left: pd.Series, right: pd.Series) -> bool:
+    left_numeric = pd.to_numeric(left, errors="coerce")
+    right_numeric = pd.to_numeric(right, errors="coerce")
+    both_missing = left_numeric.isna() & right_numeric.isna()
+    both_finite = left_numeric.notna() & right_numeric.notna()
+    return bool(
+        (both_missing | both_finite).all()
+        and np.isclose(left_numeric.loc[both_finite], right_numeric.loc[both_finite], rtol=1e-8, atol=1e-10).all()
+    )
+
+
+def _validate_target_artifacts(
+    full: pd.DataFrame, train: pd.DataFrame, mask: pd.DataFrame,
+    prediction: pd.DataFrame, *, target: str, no_double: bool,
+) -> None:
+    target_masks: dict[str, pd.Series] = {}
+    for suffix in ("score", "se"):
+        column = f"{target}_{suffix}"
+        full_values, train_values, mask_values = (
+            _numeric(full, column, "full data"), _numeric(train, column, "train split"),
+            _numeric(mask, column, "mask"),
+        )
+        _validate_target_mask(mask_values, target=target)
+        held = mask_values.eq(1)
+        if not _finite(full_values.loc[held]).all() or _finite(train_values.loc[held]).any():
+            raise ValueError(f"target artifact contradiction for {target}: mask-1 {suffix} must be finite in full and missing in train")
+        if not _same_including_missing(train_values.loc[~held], full_values.loc[~held]):
+            raise ValueError(f"target artifact contradiction for {target}: mask-0 {suffix} differs from full data")
+        target_masks[suffix] = mask_values
+    if not target_masks["score"].eq(target_masks["se"]).all():
+        raise ValueError(f"target artifact contradiction for {target}: score and SE masks differ")
+    score = f"{target}_score"
+    train_score = _numeric(train, score, "train split")
+    if "pos_aminoacid" not in train:
+        raise ValueError("train split is missing pos_aminoacid for Column Mean reconstruction")
+    expected = train_score.fillna(train.groupby("pos_aminoacid")[score].transform("mean")).fillna(train_score.mean())
+    actual = _numeric(prediction, score, "prediction")
+    if not _same_including_missing(actual, expected):
+        raise ValueError(f"prediction artifact for {target}_score does not match deterministic Column Mean reconstruction")
+    if no_double:
+        for context in CONTEXTS:
+            for suffix in ("score", "se"):
+                column = f"{context}_{suffix}"
+                mask_values = _numeric(mask, column, "mask")
+                if mask_values.isna().any() or not mask_values.isin({0, 1}).all():
+                    raise ValueError(f"no-double mask column {column} must contain only 0 or 1")
+                if context != target:
+                    if not mask_values.eq(0).all() or not _same_including_missing(train[column], full[column]):
+                        raise ValueError(f"no-double split violates non-target artifact contract for {column}")
 
 
 def _shift_type(source: str, target: str) -> str:
@@ -252,6 +306,10 @@ def build_task_loss_rows(
     for target in targets:
         if target not in CONTEXTS:
             raise ValueError(f"unknown target context: {target}")
+        _validate_target_artifacts(
+            full, train, mask, prediction, target=target,
+            no_double=dataset == "no_double",
+        )
         if include_within:
             rows.append(
                 _score_row(
